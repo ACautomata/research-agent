@@ -1,6 +1,5 @@
 # === Sensitive: tokens & credentials ===
 .env
-openclaw.json
 agents/*/agent/auth-profiles.json
 **/*.key
 **/*.pem

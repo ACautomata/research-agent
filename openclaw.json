@@ -1,0 +1,168 @@
+{
+  "meta": {
+    "lastTouchedVersion": "2026.4.9",
+    "lastTouchedAt": "2026-04-22T12:27:09.609Z"
+  },
+  "update": {
+    "checkOnStart": false
+  },
+  "gateway": {
+    "bind": "loopback",
+    "controlUi": {
+      "allowInsecureAuth": true,
+      "allowedOrigins": [
+        "http://localhost:18789",
+        "http://127.0.0.1:18789"
+      ]
+    },
+    "mode": "local",
+    "port": 18789,
+    "tailscale": {
+      "mode": "off",
+      "resetOnExit": false
+    },
+    "auth": {
+      "mode": "token",
+      "token": "${GATEWAY_TOKEN}"
+    }
+  },
+  "browser": {
+    "headless": true,
+    "noSandbox": true,
+    "defaultProfile": "openclaw",
+    "executablePath": "/usr/bin/chromium"
+  },
+  "secrets": {
+    "providers": {
+      "default": {
+        "source": "env"
+      }
+    },
+    "defaults": {
+      "env": "default"
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "minimax/MiniMax-M2.7",
+        "fallbacks": [
+          "minimax/MiniMax-M2.7-highspeed"
+        ]
+      },
+      "models": {
+        "minimax/MiniMax-M2.7": {},
+        "minimax/MiniMax-M2.7-highspeed": {}
+      },
+      "compaction": {
+        "mode": "safeguard"
+      },
+      "sandbox": {
+        "mode": "off",
+        "workspaceAccess": "none"
+      },
+      "elevatedDefault": "full",
+      "maxConcurrent": 4,
+      "subagents": {
+        "maxConcurrent": 8
+      }
+    }
+  },
+  "messages": {
+    "ackReactionScope": "group-mentions",
+    "tts": {
+      "auto": "off",
+      "mode": "final",
+      "provider": "edge",
+      "providers": {
+        "edge": {
+          "voice": "zh-CN-XiaoxiaoNeural",
+          "lang": "zh-CN",
+          "outputFormat": "ogg-24khz-16bit-mono-opus",
+          "pitch": "+0Hz",
+          "rate": "+0%",
+          "volume": "+0%",
+          "timeoutMs": 30000
+        }
+      }
+    }
+  },
+  "commands": {
+    "native": "auto",
+    "nativeSkills": "auto"
+  },
+  "tools": {
+    "profile": "full",
+    "sessions": {
+      "visibility": "all"
+    },
+    "fs": {
+      "workspaceOnly": true
+    }
+  },
+  "channels": {
+    "feishu": {
+      "enabled": true,
+      "domain": "feishu",
+      "connectionMode": "websocket",
+      "defaultAccount": "main",
+      "accounts": {
+        "main": {
+          "appId": "${FEISHU_APP_ID}",
+          "appSecret": "${FEISHU_APP_SECRET}",
+          "name": "Primary bot",
+          "enabled": true
+        }
+      },
+      "dmPolicy": "pairing",
+      "groupPolicy": "allowlist",
+      "requireMention": true,
+      "textChunkLimit": 4000,
+      "mediaMaxMb": 30,
+      "streaming": "partial",
+      "typingReaction": true,
+      "resolveSenderNames": true,
+      "tools": {
+        "drive": true
+      }
+    }
+  },
+  "plugins": {
+    "entries": {
+      "minimax": {
+        "enabled": true
+      },
+      "browser": {
+        "enabled": true
+      }
+    },
+    "installs": {}
+  },
+  "memory": {
+    "backend": "qmd",
+    "citations": "auto",
+    "qmd": {
+      "includeDefaultMemory": true,
+      "sessions": {
+        "enabled": true
+      },
+      "limits": {
+        "timeoutMs": 8000,
+        "maxResults": 16
+      },
+      "update": {
+        "onBoot": true,
+        "interval": "5m",
+        "debounceMs": 15000
+      },
+      "command": "/usr/local/bin/qmd",
+      "paths": [
+        {
+          "path": "/home/node/.openclaw/workspace",
+          "name": "workspace",
+          "pattern": "**/*.md"
+        }
+      ]
+    }
+  }
+}

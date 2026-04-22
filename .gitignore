@@ -23,7 +23,6 @@ agents/*/qmd/
 *~
 
 # === Managed by CLI (do not track) ===
-skills/
 extensions/
 
 # === Channel runtime data ===

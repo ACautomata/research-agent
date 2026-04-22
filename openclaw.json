@@ -119,12 +119,9 @@
       "requireMention": true,
       "textChunkLimit": 4000,
       "mediaMaxMb": 30,
-      "streaming": "partial",
+      "streaming": true,
       "typingReaction": true,
-      "resolveSenderNames": true,
-      "tools": {
-        "drive": true
-      }
+      "resolveSenderNames": true
     }
   },
   "plugins": {

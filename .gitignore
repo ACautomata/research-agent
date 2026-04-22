@@ -1,0 +1,24 @@
+# === Sensitive: tokens & credentials ===
+.env
+openclaw.json
+agents/*/agent/auth-profiles.json
+**/*.key
+**/*.pem
+**/secrets*
+
+# === Runtime data ===
+logs/
+tasks/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# === QMD cache & index ===
+qmd/
+agents/*/qmd/
+
+# === OS / editor ===
+.DS_Store
+*.swp
+*.swo
+*~

@@ -1,6 +1,9 @@
 # === Sensitive: tokens & credentials ===
 .env
+secrets.json
 agents/*/agent/auth-profiles.json
+agents/*/agent/models.json
+agents/*/agent/auth-state.json
 **/*.key
 **/*.pem
 **/secrets*
@@ -11,10 +14,34 @@ tasks/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+*.db
+*.db-shm
+*.db-wal
+lcm.db*
 
 # === QMD cache & index ===
 qmd/
 agents/*/qmd/
+
+# === Session & state ===
+agents/*/sessions/
+credentials/
+cron/
+devices/
+identity/
+feishu/
+exec-approvals.json
+
+# === Config backups ===
+openclaw.json.bak
+openclaw.json.last-good
+
+# === Internal metadata ===
+.clawhub-init-complete
+.config/
+
+# === Workspace runtime ===
+workspace/.openclaw/
 
 # === OS / editor ===
 .DS_Store

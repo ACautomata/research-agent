@@ -1,7 +1,7 @@
 {
   "meta": {
-    "lastTouchedVersion": "2026.4.9",
-    "lastTouchedAt": "2026-04-22T12:27:09.609Z"
+    "lastTouchedVersion": "2026.4.21",
+    "lastTouchedAt": "2026-04-23T04:27:13.530Z"
   },
   "update": {
     "checkOnStart": false
@@ -51,8 +51,9 @@
         ]
       },
       "models": {
-        "minimax/MiniMax-M2.7": {},
-        "minimax/MiniMax-M2.7-highspeed": {}
+        "minimax/MiniMax-M2.7": {
+          "alias": "Minimax"
+        }
       },
       "compaction": {
         "mode": "safeguard"
@@ -110,18 +111,15 @@
         "main": {
           "appId": "${FEISHU_APP_ID}",
           "appSecret": "${FEISHU_APP_SECRET}",
-          "name": "Primary bot",
+          "name": "Research Assistant",
           "enabled": true
+        },
+        "default": {
+          "dmPolicy": "pairing",
+          "groupPolicy": "allowlist"
         }
       },
-      "dmPolicy": "pairing",
-      "groupPolicy": "allowlist",
-      "requireMention": true,
-      "textChunkLimit": 4000,
-      "mediaMaxMb": 30,
-      "streaming": true,
-      "typingReaction": true,
-      "resolveSenderNames": true
+      "requireMention": true
     }
   },
   "plugins": {
@@ -131,9 +129,37 @@
       },
       "browser": {
         "enabled": true
+      },
+      "lossless-claw": {
+        "enabled": true
+      },
+      "memory-core": {
+        "config": {
+          "dreaming": {
+            "enabled": true
+          }
+        }
       }
     },
-    "installs": {}
+    "installs": {
+      "lossless-claw": {
+        "source": "path",
+        "spec": "@martian-engineering/lossless-claw",
+        "installPath": "/home/node/.openclaw/extensions/lossless-claw",
+        "version": "0.5.2",
+        "resolvedName": "@martian-engineering/lossless-claw",
+        "resolvedVersion": "0.9.2",
+        "resolvedSpec": "@martian-engineering/lossless-claw@0.9.2",
+        "integrity": "sha512-T33c/xgqwmb2l3W/PaZxMYiG29wu1lhRGiZ034DVay85Xnubcsqq7cF0zKYqfpU3R572+8eWUw813595KMUwiw==",
+        "shasum": "40fc865a4dd53f494cecae7a249dea5ac9126af1",
+        "resolvedAt": "2026-04-22T16:13:46.239Z",
+        "installedAt": "2026-04-23T04:27:08.670Z",
+        "sourcePath": "/tmp/lossless-claw-enhanced"
+      }
+    },
+    "slots": {
+      "contextEngine": "lossless-claw"
+    }
   },
   "memory": {
     "backend": "qmd",
@@ -164,5 +190,48 @@
   },
   "session": {
     "dmScope": "per-peer"
+  },
+  "models": {
+    "mode": "merge",
+    "providers": {
+      "minimax": {
+        "baseUrl": "https://api.minimaxi.com/anthropic",
+        "models": [
+          {
+            "id": "MiniMax-M2.7",
+            "name": "MiniMax M2.7",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0.3,
+              "output": 1.2,
+              "cacheRead": 0.06,
+              "cacheWrite": 0.375
+            },
+            "contextWindow": 204800,
+            "maxTokens": 131072
+          }
+        ],
+        "api": "anthropic-messages",
+        "authHeader": true
+      }
+    }
+  },
+  "auth": {
+    "profiles": {
+      "minimax:cn": {
+        "provider": "minimax",
+        "mode": "api_key"
+      }
+    }
+  },
+  "wizard": {
+    "lastRunAt": "2026-04-22T15:41:27.246Z",
+    "lastRunVersion": "2026.4.9",
+    "lastRunCommand": "configure",
+    "lastRunMode": "local"
   }
 }

@@ -54,3 +54,7 @@ extensions/
 
 # === Channel runtime data ===
 qqbot/
+
+# === Dreaming runtime data ===
+workspace/memory/.dreams/
+workspace/memory/dreaming/

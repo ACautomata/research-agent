@@ -1,7 +1,7 @@
 {
   "meta": {
     "lastTouchedVersion": "2026.4.21",
-    "lastTouchedAt": "2026-04-23T04:27:13.530Z"
+    "lastTouchedAt": "2026-04-23T12:34:17.555Z"
   },
   "update": {
     "checkOnStart": false
@@ -120,6 +120,15 @@
         }
       },
       "requireMention": true
+    },
+    "discord": {
+      "enabled": true,
+      "token": {
+        "source": "env",
+        "provider": "default",
+        "id": "DISCORD_BOT_TOKEN"
+      },
+      "groupPolicy": "open"
     }
   },
   "plugins": {
@@ -153,8 +162,7 @@
         "integrity": "sha512-T33c/xgqwmb2l3W/PaZxMYiG29wu1lhRGiZ034DVay85Xnubcsqq7cF0zKYqfpU3R572+8eWUw813595KMUwiw==",
         "shasum": "40fc865a4dd53f494cecae7a249dea5ac9126af1",
         "resolvedAt": "2026-04-22T16:13:46.239Z",
-        "installedAt": "2026-04-23T04:27:08.670Z",
-        "sourcePath": "/tmp/lossless-claw-enhanced"
+        "installedAt": "2026-04-23T04:27:08.670Z"
       }
     },
     "slots": {
@@ -216,7 +224,7 @@
           }
         ],
         "api": "anthropic-messages",
-        "authHeader": true
+        "authHeader": true,
       }
     }
   },

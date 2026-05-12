@@ -41,7 +41,7 @@ openclaw.json.last-good
 .config/
 
 # === Workspace runtime ===
-workspace/.openclaw/
+workspace*/.openclaw/
 
 # === OS / editor ===
 .DS_Store
@@ -58,6 +58,8 @@ qqbot/
 # === Dreaming runtime data ===
 workspace/memory/.dreams/
 workspace/memory/dreaming/
+workspace-paper-review/memory/.dreams/
+workspace-paper-review/memory/dreaming/
 
 # === Sensitive user data ===
 workspace/zhihu_cookies.json

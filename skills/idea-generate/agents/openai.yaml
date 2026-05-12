@@ -1,0 +1,4 @@
+interface:
+  display_name: "Idea Generate"
+  short_description: "Generate research ideas from wiki context"
+  default_prompt: "Use $idea-generate to propose evidence-backed candidate research ideas from my wiki and repo context."

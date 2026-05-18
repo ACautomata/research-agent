@@ -1,6 +1,6 @@
 ---
 name: idea-generate
-description: Generate structured research ideas from papers placed in a local paper/ folder, plus optional wiki, memory, experiment logs, and repository context. Use when Codex needs to summarize related papers, extract limitations or future-work signals, propose improvement ideas, and write recommended Idea Cards to a Markdown file. Do not use for full PRD writing or experiment execution.
+description: Generate structured research ideas from papers placed in a local paper/ folder, plus optional wiki, memory, experiment logs, and repository context. Use when the agent needs to summarize related papers, extract limitations or future-work signals, propose improvement ideas, and write recommended Idea Cards to a Markdown file. Do not use for full PRD writing or experiment execution.
 ---
 
 # Idea Generate
@@ -11,6 +11,31 @@ Generate candidate research ideas from evidence. The demo path assumes the user 
 
 Do not produce unconstrained brainstorming. Produce ideas that are grounded in paper evidence, comparable side by side, and ready for human review or downstream evaluation.
 
+## OpenClaw Compatibility
+
+This is an OpenClaw workspace skill. It should live at:
+
+```text
+skills/idea-generate/SKILL.md
+```
+
+The skill follows the OpenClaw / AgentSkills layout: one `SKILL.md` with YAML frontmatter, optional `references/`, optional `scripts/`, and no per-agent YAML config. Resolve referenced helper files relative to `{baseDir}` or this skill directory.
+
+## Dependencies
+
+The scripts use the Python standard library by default. Two extractors are optional:
+
+- `pypdf` for PDF text extraction
+- `python-docx` for DOCX text extraction
+
+Install them with:
+
+```bash
+python -m pip install -r {baseDir}/requirements.txt
+```
+
+If an optional dependency is missing, the extractor records an unavailable-extraction note instead of failing the whole run.
+
 ## Demo Workflow
 
 Use this workflow for the minimum runnable demo:
@@ -19,12 +44,12 @@ Use this workflow for the minimum runnable demo:
 2. Create a run directory under `idea-runs/YYYYMMDD-HHMMSS-<topic-slug>/`.
 3. Run `scripts/build_paper_context_pack.py` to extract paper text and limitation/future-work snippets.
 4. Read the generated `paper-context.md` and `paper-context.json`.
-5. As Codex, write `paper-analysis.md` with:
+5. As the agent, write `paper-analysis.md` with:
    - paper-by-paper summary
    - cross-paper common findings
    - limitations, gaps, and future-work signals
    - transferable insights from one paper to another
-6. As Codex, write `draft-ideas.json` with 5-10 candidate Idea Cards based on:
+6. As the agent, write `draft-ideas.json` with 5-10 candidate Idea Cards based on:
    - paper limitations
    - future work
    - contradictions or gaps across papers

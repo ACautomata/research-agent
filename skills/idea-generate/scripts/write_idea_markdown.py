@@ -41,6 +41,26 @@ def paper_list(context: dict | None) -> list[str]:
     return [f"- {p.get('paper_id', '?')}: {p.get('title', 'Untitled')} (`{p.get('path', '')}`)" for p in papers]
 
 
+def collect_open_questions(ideas: list[dict], context: dict | None) -> list[str]:
+    questions: list[str] = []
+    if context:
+        questions.extend(as_list(context.get("open_questions")))
+        questions.extend(as_list(context.get("assumptions")))
+    for idea in ideas:
+        questions.extend(as_list(idea.get("open_questions")))
+        assumptions = idea.get("assumptions")
+        for assumption in as_list(assumptions):
+            questions.append(f"Assumption to verify for {idea.get('idea_id', 'idea')}: {assumption}")
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for question in questions:
+        normalized = " ".join(question.split()).lower()
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            deduped.append(question)
+    return deduped
+
+
 def render(ideas: list[dict], context: dict | None, analysis: str, top_n: int) -> str:
     topic = context.get("topic", "") if context else ""
     selected = sort_ideas(ideas)[:top_n]
@@ -89,7 +109,9 @@ def render(ideas: list[dict], context: dict | None, analysis: str, top_n: int) -
                 "",
             ]
         )
-    lines.extend(["## Open Questions", "", "- Which ideas need further feasibility checks before implementation?", "- Which extracted paper snippets need manual confirmation for exact interpretation?", ""])
+    open_questions = collect_open_questions(selected, context)
+    if open_questions:
+        lines.extend(["## Open Questions", "", *[f"- {item}" for item in open_questions], ""])
     return "\n".join(lines)
 
 

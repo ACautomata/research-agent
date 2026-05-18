@@ -10,9 +10,11 @@ Return:
 For each Idea Card:
 
 - keep it concise
-- include at least 2 evidence anchors when possible
-- include one minimum experiment
-- include at least one expected metric
-- include one main risk
+- include `paper_insight_or_limitation`
+- include at least 2 evidence anchors when possible in `evidence_chain`
+- include one `minimum_experiment`
+- include at least one expected metric in `expected_metric_change`
+- include one main `risks` entry
+- include `recommendation_reason`
 
 Prefer fewer high-signal cards over a longer list of weak ideas.

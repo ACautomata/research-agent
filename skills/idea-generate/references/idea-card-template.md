@@ -8,14 +8,14 @@ title:
 one_sentence_hypothesis:
 target_problem:
 mechanism:
-novelty_basis:
+paper_insight_or_limitation:
 evidence_chain:
 minimum_experiment:
 expected_metric_change:
 implementation_scope:
 risks:
 confidence:
-status:
+recommendation_reason:
 ```
 
 Keep each card concise and comparable.

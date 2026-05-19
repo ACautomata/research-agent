@@ -65,7 +65,8 @@
       "elevatedDefault": "full",
       "maxConcurrent": 4,
       "subagents": {
-        "maxConcurrent": 8
+        "maxConcurrent": 8,
+        "allowAgents": ["autoresearch"]
       }
     },
     "list": [
@@ -73,12 +74,12 @@
         "id": "main",
         "name": "颖姗",
         "default": true,
-        "workspace": "workspace"
+        "workspace": "~/.openclaw/workspace"
       },
       {
         "id": "autoresearch",
         "name": "Autoresearch",
-        "workspace": "agents/autoresearch/workspace"
+        "workspace": "~/.openclaw/agents/autoresearch/workspace"
       }
     ]
   },

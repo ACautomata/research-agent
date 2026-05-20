@@ -174,7 +174,13 @@
         "enabled": true
       },
       "lossless-claw": {
-        "enabled": true
+        "enabled": true,
+        "config": {
+          "freshTailCount": 64,
+          "incrementalMaxDepth": 1,
+          "contextThreshold": 0.75,
+          "newSessionRetainDepth": 2
+        }
       },
       "memory-core": {
         "config": {

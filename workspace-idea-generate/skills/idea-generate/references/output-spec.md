@@ -6,6 +6,7 @@ Return:
 2. one short evidence summary
 3. 5-10 candidate Idea Cards
 4. optional open questions
+5. a lightweight human feedback prompt for follow-up refinement
 
 For each Idea Card:
 
@@ -29,3 +30,7 @@ Before export, verify:
 - every idea names at least one metric
 - every idea respects code, data, compute, and time constraints from the brief
 - open questions are listed instead of silently filled in
+
+## Follow-Up Feedback
+
+After the first export, the user can ask to keep, reject, revise, re-rank, or expand ideas. Write follow-up recommendation files with versioned names such as `recommended-ideas.v2.md`; do not overwrite the first output.

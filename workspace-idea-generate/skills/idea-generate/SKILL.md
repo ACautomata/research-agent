@@ -1,13 +1,13 @@
 ---
 name: idea-generate
-description: Generate structured research ideas from papers placed in a local paper/ folder, plus optional wiki, memory, experiment logs, and repository context. Use when the agent needs to summarize related papers, extract limitations or future-work signals, propose improvement ideas, and write recommended Idea Cards to a Markdown file. Do not use for full PRD writing or experiment execution.
+description: Generate structured research ideas from papers, OpenClaw workspace context, experiment results, user preferences, and follow-up feedback. Use when the agent needs to summarize related evidence, extract limitations or future-work signals, propose improvement ideas, refine ideas after human review, and write recommended Idea Cards to a Markdown file. Do not use for full PRD writing or experiment execution.
 ---
 
 # Idea Generate
 
 ## Overview
 
-Generate candidate research ideas from evidence. The demo path assumes the user manually places related papers under a local `paper/` folder. The skill extracts paper context, summarizes limitations and future-work signals, proposes improvement ideas, and writes the most recommended ideas to Markdown.
+Generate candidate research ideas from evidence. The simple demo path still supports papers under a local `paper/` folder, but the normal OpenClaw path can also intake relevant wiki pages, paper-review outputs, experiment logs, failed attempts, repository context, and user preferences. The skill summarizes the research landscape, proposes improvement ideas, filters and ranks them, and writes the most recommended ideas to Markdown.
 
 Do not produce unconstrained brainstorming. Produce ideas that are grounded in paper evidence, comparable side by side, and ready for human review or downstream evaluation.
 
@@ -17,9 +17,11 @@ This skill is part of the `workspace-idea-generate` sub-agent. Keep it aligned w
 
 - `docs/task-requirements.md`: four required deliverables from the task brief.
 - `docs/design-paradigm.md`: mixed checklist plus harness design.
+- `docs/context-intake.md`: flexible OpenClaw workspace context intake.
+- `docs/interactive-refinement.md`: human feedback and second-pass refinement workflow.
 - `docs/io-spec.md`: stage-by-stage input/output contract.
 - `docs/skill-split.md`: current and future skill/module boundaries.
-- `benchmarks/seed-qa.md`: seed benchmark cases for self-test.
+- `../../benchmarks/idea-generate/seed-qa.md`: seed benchmark cases for self-test.
 
 ## OpenClaw Compatibility
 
@@ -46,32 +48,35 @@ python -m pip install -r {baseDir}/requirements.txt
 
 If an optional dependency is missing, the extractor records an unavailable-extraction note instead of failing the whole run.
 
-## Demo Workflow
+## Minimum Runnable Workflow
 
-Use this workflow for the minimum runnable demo:
+Use this workflow for the minimum runnable path. Keep the paper-only path compatible, but add workspace context when it is available:
 
 1. Normalize the user request into the checklist fields in `references/brief-template.md`; mark missing fields as assumptions.
-2. Locate the paper folder. Default to `<workspace>/paper`.
-3. Create a run directory under `idea-runs/YYYYMMDD-HHMMSS-<topic-slug>/`.
-4. Run `scripts/build_paper_context_pack.py` to extract paper text and limitation/future-work snippets.
-5. Read the generated `paper-context.md` and `paper-context.json`.
-6. As the agent, write `paper-analysis.md` with:
+2. Build a concise context digest from user-provided materials, relevant OpenClaw workspace pages, experiment results, failed attempts, code constraints, and user preferences.
+3. Locate the paper folder when present. Default to `<workspace>/paper`.
+4. Create a run directory under `idea-runs/YYYYMMDD-HHMMSS-<topic-slug>/`.
+5. Run `scripts/build_paper_context_pack.py` to extract paper text and limitation/future-work snippets when papers are available.
+6. Read the generated `paper-context.md` and `paper-context.json` if they exist.
+7. As the agent, write `paper-analysis.md` with:
    - paper-by-paper summary
    - cross-paper common findings
    - limitations, gaps, and future-work signals
    - transferable insights from one paper to another
    - constraints from code, data, compute, metrics, and failed experiments when provided
-7. As the agent, write `draft-ideas.json` with 5-10 candidate Idea Cards based on:
+8. As the agent, write `draft-ideas.json` with 5-10 candidate Idea Cards based on:
    - paper limitations
    - future work
    - contradictions or gaps across papers
    - transferable insights from one paper to another
+   - experiment results and failed attempts
+   - user preferences and hard constraints
    - simple, testable modifications
-8. Run `scripts/idea_dedup.py`.
-9. Run `scripts/validate_idea_cards.py`.
-10. Fix any validation errors in the JSON.
-11. Run `scripts/write_idea_markdown.py`.
-12. Return the final `recommended-ideas.md` path and a short summary.
+9. Run `scripts/idea_dedup.py`.
+10. Run `scripts/validate_idea_cards.py`.
+11. Fix any validation errors in the JSON.
+12. Run `scripts/write_idea_markdown.py`.
+13. Return the final `recommended-ideas.md` path and a short summary.
 
 Example commands:
 
@@ -101,7 +106,7 @@ Try to fill these fields:
 
 If some fields are missing, infer conservatively from local context and mark them as assumptions.
 
-For the demo, only `research_topic` is strictly required. If the user does not provide it, infer from filenames and paper snippets, then mark it as an assumption.
+For the demo, only `research_topic` is strictly required. If the user does not provide it, infer from filenames, paper snippets, workspace context, or user discussion, then mark it as an assumption.
 
 Use the checklist policy in `docs/design-paradigm.md`: continue with explicit assumptions when possible, and ask a follow-up only when there is no research topic, no evidence material, or an explicit hard constraint cannot be resolved.
 
@@ -109,38 +114,41 @@ Use the checklist policy in `docs/design-paradigm.md`: continue with explicit as
 
 Read only the files needed for the current request, in this order:
 
-1. `paper/` folder via `scripts/build_paper_context_pack.py`
-2. Generated `paper-context.md`
-3. Relevant `syntheses/` pages for the topic, if present
-4. Relevant `sources/` pages for evidence, if present
-5. Relevant `entities/` pages for methods, tasks, and metrics, if present
-6. Relevant `memory/` or `MEMORY.md` entries for recent discussion and failures, if present
-7. Repo files needed to understand the baseline or implementation scope, if needed
+1. User-provided files, folders, links, or pasted notes.
+2. `paper/` folder via `scripts/build_paper_context_pack.py`, if present.
+3. Generated `paper-context.md`, if present.
+4. Relevant `workspace-autoresearch/wiki/` pages, starting from `wiki/index.md` when available.
+5. Relevant `workspace-paper-review/` outputs, if the task depends on reviewed papers or extracted experiments.
+6. Experiment logs, result tables, ablations, failed attempts, or qualitative observations.
+7. Relevant `memory/` or `MEMORY.md` entries for recent discussion and failures, if present.
+8. Repo files needed to understand the baseline or implementation scope, if needed.
 
 Do not bulk-load the entire wiki.
 
 ## Core Workflow
 
 1. Build the `Idea Generation Brief`
-2. Build paper context from `paper/`
-3. Write `paper-analysis.md` before drafting ideas
-4. Group evidence into candidate opportunity buckets:
+2. Build a compact context digest when the task uses workspace context beyond papers.
+3. Build paper context from `paper/` when available.
+4. Write `paper-analysis.md` before drafting ideas.
+5. Group evidence into candidate opportunity buckets:
    - literature gaps
    - contradictory findings
    - transferable methods
    - historical failures
    - metric weaknesses
    - engineering constraints
-5. Generate candidate ideas using `references/generation-strategies.md`
-6. Deduplicate and cluster similar ideas
-7. Validate every idea against `references/idea-card-template.md`
-8. Score ideas lightly for:
+6. Generate candidate ideas using `references/generation-strategies.md`.
+7. Deduplicate and cluster similar ideas.
+8. Validate every idea against `references/idea-card-template.md`.
+9. Score ideas lightly for:
    - evidence strength
    - testability
    - feasibility
    - novelty
    - expected impact
-9. Output recommended Idea Cards using `references/idea-card-template.md`
+10. Output recommended Idea Cards using `references/idea-card-template.md`.
+11. If the user provides feedback, apply `docs/interactive-refinement.md` and write a versioned follow-up such as `recommended-ideas.v2.md`.
 
 Use `references/paper-demo-output-spec.md` for the runnable demo output contract.
 
@@ -154,6 +162,12 @@ Use `references/paper-demo-output-spec.md` for the runnable demo output contract
 6. Prefer 5-10 high-signal ideas over a long noisy list
 7. Do not claim a paper says something unless it appears in `paper-context.md` or another cited source
 8. Prepare ideas for human review or downstream evaluation; do not declare the final winner inside this skill
+
+## Human Feedback Refinement
+
+After `recommended-ideas.md`, accept lightweight user feedback such as selected idea IDs, rejected ideas with reasons, new constraints, preferred risk level, or new experiment results. Use that feedback to re-rank existing ideas, revise selected ideas, or add a small number of new ideas.
+
+Do not overwrite the first recommendation file. Write a versioned follow-up artifact such as `recommended-ideas.v2.md` and summarize what feedback changed.
 
 ## Output Structure
 
@@ -170,10 +184,10 @@ The main artifact is the Markdown file, not the chat response. Each Idea Card sh
 
 When this skill changes materially, update or run the benchmark docs:
 
-1. Extend `benchmarks/seed-qa.md` if the change adds a new behavior class.
-2. Use `benchmarks/benchmark-spec.md` to build or expand QA cases.
+1. Extend `../../benchmarks/idea-generate/seed-qa.md` if the change adds a new behavior class.
+2. Use `../../benchmarks/idea-generate/benchmark-spec.md` to build or expand QA cases.
 3. Run self-test cases in clean sessions.
-4. Record results with `benchmarks/self-test-report-template.md`.
+4. Record results with `../../benchmarks/idea-generate/self-test-report-template.md`.
 5. Mention pass/fail status in the PR.
 
 ## Quality Bar

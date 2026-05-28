@@ -12,6 +12,7 @@ Idea Generate 支持三档输入。
 ### 推荐输入
 
 - `paper/` 目录下的论文文件，支持 `.pdf`、`.txt`、`.md`、`.markdown`、`.docx`。
+- OpenClaw workspace 中与当前主题相关的 wiki 页面、paper-review 输出或已有分析。
 - 当前 baseline 描述。
 - 可用数据集和评价指标。
 - 可用代码或仓库路径。
@@ -28,18 +29,25 @@ Idea Generate 支持三档输入。
 
 ## 处理流程
 
-### Stage 1: Brief 归一化
+### Stage 1: Brief 归一化与上下文摄取
 
 输入：
 
 - 用户自然语言需求。
 - 可选 brief 文件。
-- 可选 repo、wiki、实验记录。
+- 可选 repo、wiki、paper-review 输出、实验记录、用户偏好。
 
 输出：
 
 - 归一化 `Idea Generation Brief`。
 - 明确字段缺失和假设。
+- 可选 `context-digest.md`，用于记录本轮实际读取的材料、关键证据、实验结果、失败现象、用户约束和假设。
+
+原则：
+
+- 不要求上游 workspace 输出固定 schema。
+- 只读取当前任务相关的最小上下文。
+- 优先使用用户明确指定的材料，其次读取本地论文、知识库、实验记录和代码约束。
 
 ### Stage 2: Paper Context 构建
 
@@ -64,7 +72,8 @@ Idea Generate 支持三档输入。
 输入：
 
 - `paper-context.md`
-- wiki 或实验记录。
+- `context-digest.md`
+- wiki、paper-review 输出或实验记录。
 - brief。
 
 输出：
@@ -145,6 +154,33 @@ Idea Generate 支持三档输入。
 - Main limitations or gaps。
 - Recommended ideas ranked by priority。
 - Open questions or assumptions。
+- Human feedback prompt。
+
+### Stage 7: Human Feedback Refinement
+
+输入：
+
+- 上一轮 `recommended-ideas.md`。
+- 上一轮 `ideas.dedup.json`。
+- 用户自然语言反馈或 `human-feedback.md`。
+
+输出：
+
+- `recommended-ideas.v2.md` 或后续版本。
+
+反馈可以包括：
+
+- 保留某些 idea。
+- 否决某些 idea 并说明原因。
+- 新增偏好、风险等级、算力或实现约束。
+- 要求围绕某个失败实验、指标短板或论文线索补充 idea。
+
+要求：
+
+- 不覆盖上一轮输出。
+- 标明采用了哪些反馈。
+- 被否决或降级的 idea 需要保留简短理由。
+- 人类选择只改变优先级和方向，不代表 idea 已被验证成功。
 
 ## 失败与降级
 
@@ -153,4 +189,4 @@ Idea Generate 支持三档输入。
 - 证据不足：只允许生成 `low-confidence` ideas。
 - 没有可用 metric：必须在 open questions 中标注，不得伪造指标。
 - 没有代码上下文：implementation_scope 必须写成概念验证或伪代码级别。
-
+- 没有结构化上游输出：继续从 Markdown、日志、表格或用户对话中提取上下文，不要求上游补 schema。

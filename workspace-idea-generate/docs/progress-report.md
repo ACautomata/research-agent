@@ -10,9 +10,9 @@
 
 ### 产出
 
-- 5 条手工 Seed QA，覆盖 paper-only、paper+code、failed experiment、weak evidence、constraint-heavy 五类场景：`benchmarks/seed-qa.md`
-- Benchmark 构建规则与 LLM 扩充规则：`benchmarks/benchmark-spec.md`
-- 自测报告模板：`benchmarks/self-test-report-template.md`
+- 5 条手工 Seed QA，覆盖 paper-only、paper+code、failed experiment、weak evidence、constraint-heavy 五类场景：`../../benchmarks/idea-generate/seed-qa.md`
+- Benchmark 构建规则与 LLM 扩充规则：`../../benchmarks/idea-generate/benchmark-spec.md`
+- 自测报告模板：`../../benchmarks/idea-generate/self-test-report-template.md`
 - 现有 idea card 字段级校验脚本：`skills/idea-generate/scripts/validate_idea_cards.py`
 - 6 维评判体系：evidence grounding / constraint following / idea card completeness / testability / risk honesty / output usability
 
@@ -28,7 +28,7 @@
 - 执行 clean-session 自测并生成最终 `self-test-report.md`。
 - 视需要补充自动化 runner，将 agent 输出、rubric 评分和报告生成串起来。
 
-**交付物**：`benchmarks/seed-qa.md`、`benchmarks/benchmark-spec.md`、`benchmarks/self-test-report-template.md`
+**交付物**：`../../benchmarks/idea-generate/seed-qa.md`、`../../benchmarks/idea-generate/benchmark-spec.md`、`../../benchmarks/idea-generate/self-test-report-template.md`
 
 ---
 

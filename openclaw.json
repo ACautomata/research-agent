@@ -65,7 +65,9 @@
       "elevatedDefault": "full",
       "maxConcurrent": 4,
       "subagents": {
-        "maxConcurrent": 8
+        "delegationMode": "prefer",
+        "maxConcurrent": 8,
+        "maxSpawnDepth": 1
       }
     }
   },

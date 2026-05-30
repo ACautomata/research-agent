@@ -18,6 +18,7 @@ This repo follows OpenClaw's hub-and-spoke multi-agent pattern. The main agent (
 - **workspace/** — Main agent (颖姗) working directory. Contains SOUL.md, AGENTS.md, IDENTITY.md, USER.md, TOOLS.md, MEMORY.md, HEARTBEAT.md, DREAMS.md. See [docs](https://docs.openclaw.ai/concepts/agent-workspace).
 - **workspace-autoresearch/** — Sub-agent workspace for the Autoresearch agent. Mirrors the main workspace structure with SOUL.md, AGENTS.md, IDENTITY.md, USER.md, TOOLS.md, MEMORY.md, HEARTBEAT.md, DREAMS.md. This agent is spawned by 颖姗 for paper ingest, literature queries, cross-paper comparison, and wiki quality auditing.
 - **workspace-paper-review/** — Agent workspace for paper review and validation experiment design. Contains SOUL.md, AGENTS.md, USER.md, memory/, and skills/ for the 5-stage paper analysis pipeline.
+- **workspace-idea-generate/** — Sub-agent workspace for the Idea Generate agent. Contains the `idea-generate` skill for paper-grounded research idea cards, opportunity synthesis, deduplication, validation, and Markdown export.
 - **benchmarks/** — Developer benchmarks and evaluation datasets for testing agent capabilities.
 
 ## Key Configuration Details
@@ -100,6 +101,11 @@ When creating a new subagent:
 3. Add the agent ID to `agents.defaults.subagents.allowAgents`.
 4. Write skills under `workspace-<agentId>/skills/` following the single-responsibility principle.
 5. If the main agent needs to orchestrate this subagent, create or update a main agent skill under `skills/`.
+
+## PR Rules
+
+- **Benchmark results required.** When a PR touches `benchmarks/` or any skill/agent that has benchmark coverage, the benchmark test results must be pasted into the PR description or a PR comment. Do not open a PR without them.
+- **Test new features before PR.** Every new feature (skill, agent, workflow, config change) must be tested via OpenClaw — actually trigger the agent in conversation and verify it works end-to-end. Do not open the PR without doing this.
 
 ## Gitignore Strategy
 

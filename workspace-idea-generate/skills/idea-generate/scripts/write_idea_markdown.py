@@ -69,20 +69,23 @@ def is_wiki_source(source: str) -> bool:
 def collect_wiki_writeback_candidates(ideas: list[dict]) -> list[dict[str, str]]:
     candidates: list[dict[str, str]] = []
     for idea in ideas:
+        finding = str(
+            idea.get("wiki_writeback")
+            or idea.get("target_problem")
+            or idea.get("paper_insight_or_limitation")
+            or ""
+        )
+        if not finding:
+            continue
         sources = as_list(idea.get("anchor_sources"))
         wiki_sources = [source for source in sources if is_wiki_source(source)]
-        if not wiki_sources:
+        if not wiki_sources and not idea.get("wiki_writeback"):
             continue
         candidates.append(
             {
-                "sources": "; ".join(wiki_sources),
+                "sources": "; ".join(wiki_sources or sources),
                 "idea_id": str(idea.get("idea_id", "idea")),
-                "finding": str(
-                    idea.get("wiki_writeback")
-                    or idea.get("target_problem")
-                    or idea.get("paper_insight_or_limitation")
-                    or ""
-                ),
+                "finding": finding,
             }
         )
     return candidates

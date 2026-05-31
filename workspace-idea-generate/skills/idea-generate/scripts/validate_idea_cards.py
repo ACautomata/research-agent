@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -72,6 +73,10 @@ CONCRETE_ANCHOR_MARKERS = (
     "title:",
 )
 
+PAPER_ID_RE = re.compile(r"^p\d{1,3}$", re.IGNORECASE)
+
+CONCRETE_ANCHOR_WORDS = {"paper", "wiki", "arxiv", "doi", "title"}
+
 CONCRETE_PROBLEM_MARKERS = (
     "mechanism",
     "module",
@@ -125,8 +130,24 @@ def has_generic_anchor(anchors: list[str]) -> bool:
     return False
 
 
+def looks_like_title(anchor: str) -> bool:
+    words = [word for word in re.split(r"\W+", anchor.strip()) if word]
+    if len(words) < 3:
+        return False
+    return not all(word.lower() in CONCRETE_ANCHOR_WORDS for word in words)
+
+
+def is_concrete_anchor(anchor: str) -> bool:
+    lowered = anchor.lower()
+    return (
+        PAPER_ID_RE.fullmatch(anchor.strip()) is not None
+        or any(marker in lowered for marker in CONCRETE_ANCHOR_MARKERS)
+        or looks_like_title(anchor)
+    )
+
+
 def has_concrete_anchor(anchors: list[str]) -> bool:
-    return all(any(marker in anchor.lower() for marker in CONCRETE_ANCHOR_MARKERS) for anchor in anchors)
+    return all(is_concrete_anchor(anchor) for anchor in anchors)
 
 
 def describes_concrete_problem(text: str) -> bool:

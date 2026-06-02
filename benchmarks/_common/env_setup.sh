@@ -123,6 +123,13 @@ tar --exclude='.git' --exclude='.github' --exclude='.env' \
     --exclude='bench-results' \
     -C "${ROOT}" -cf - . | \
   docker exec -i "${CONTAINER}" tar -xf - -C /home/node/.openclaw
+# init.sh runs the openclaw gateway as the in-image node user (uid 1000).
+# The files we just streamed in are owned by root (since `docker exec tar`
+# runs as the container's user -- which is root here -- and tar preserves
+# host uids). The gateway then fails to write logs/, qmd/, .config/, etc.
+# chown the whole tree to uid 1000:1000 to match the runtime user.
+log "chown /home/node/.openclaw -> 1000:1000 (openclaw runtime uid)"
+docker exec "${CONTAINER}" chown -R 1000:1000 /home/node/.openclaw || true
 log "repo copied into container"
 
 # 6. Wait for the openclaw container to be healthy. We poll `docker inspect`

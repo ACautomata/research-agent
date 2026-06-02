@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -57,7 +58,13 @@ def run_agent(container: str, agent_id: str, qa: dict, run_id: str,
     """Always invokes `agent_id` (which the CI contract pins to `main`).
     If the QA carries a `target_agent` field, the prompt is wrapped so main
     delegates to that sub-agent via sessions_spawn and returns the sub-agent's
-    final answer."""
+    final answer.
+
+    Returns (cleaned_agent_text, session_key). With --json, openclaw writes
+    the structured reply to stdout and all diagnostics to stderr, so we
+    capture them separately and only look at the JSON payload[].text fields
+    for the actual agent answer.
+    """
     target = qa.get("target_agent")
     prompt = qa["question"]
     if qa.get("input_material"):
@@ -91,11 +98,112 @@ def run_agent(container: str, agent_id: str, qa: dict, run_id: str,
     if model:
         cmd += ["--model", model]
     try:
-        out = subprocess.run(cmd, capture_output=True, text=True,
-                             timeout=qa.get("timeout_seconds", 1800) + 60)
+        proc = subprocess.run(cmd, capture_output=True, text=True,
+                              timeout=qa.get("timeout_seconds", 1800) + 60)
     except subprocess.TimeoutExpired:
         return ("", session_key)
-    return ((out.stdout or "") + "\n" + (out.stderr or ""), session_key)
+    # Per docs.openclaw.ai/tools/agent-send: with --json, the structured
+    # payload (including payloads[].text = the agent's reply) is on stdout;
+    # diagnostics, context-engine warnings, and lane errors all go to stderr.
+    # We deliberately keep them separate and only return the agent text.
+    return (_extract_agent_text(proc.stdout or "", proc.stderr or ""), session_key)
+
+
+# Lines we know are diagnostic noise from openclaw, not the agent's answer.
+_NOISE_PREFIXES = (
+    "[diagnostic]",
+    "[context-engine]",
+    "[gateway]",
+    "[plugins]",
+    "[secrets]",
+    "[heartbeat]",
+    "[ws]",
+    "[memory-core]",
+    "[memory-wiki]",
+    "Config health-state write failed",
+    "=== ",
+    "初始化",
+    "配置",
+    "启动",
+    "挂载",
+    "检测",
+    "ℹ️",
+    "已",
+    "正在",
+    "整体",
+    "上下文",
+    "最大",
+    "API",
+    "Base",
+    "Gateway",
+    "沙箱",
+    "插件",
+    "允许",
+    "当前",
+    "目标",
+    "开放",
+)
+
+
+def _extract_agent_text(stdout: str, stderr: str) -> str:
+    """Pick the agent's final text out of an `openclaw agent --json` reply.
+
+    Strategy:
+    1. Try to parse stdout as JSON. The docs document shape:
+         {"payloads": [{"text": "...", "mediaUrl": null}, ...], "meta": {...}}
+       We concatenate every payloads[].text (the agent may emit multiple
+       text parts) and return that.
+    2. If stdout isn't valid JSON (older builds, fall back) but stderr has
+       no obvious error, return stdout as-is.
+    3. If stderr says the agent itself errored (lane task error, etc.),
+       return the stderr line so the judge still has *something* to grade
+       on (and the rationale will surface the failure).
+    """
+    if not stdout.strip():
+        # The CLI may have written its real reply to stderr if --json parsing
+        # itself failed. Surface it so we don't show a confusing empty string.
+        return stderr.strip()
+    try:
+        data = json.loads(stdout)
+    except json.JSONDecodeError:
+        # Plain-text mode. Strip ANSI escapes and known diagnostic prefixes
+        # that sometimes bleed into the captured stream.
+        return _strip_diagnostics(stdout)
+
+    # Common shape: top-level "payloads" list.
+    if isinstance(data, dict):
+        payloads = data.get("payloads")
+        if isinstance(payloads, list) and payloads:
+            texts = [p.get("text", "") for p in payloads if isinstance(p, dict)]
+            joined = "\n".join(t for t in texts if t)
+            if joined.strip():
+                return joined
+        # Some embedded-fallback responses nest under "result.payloads".
+        result = data.get("result")
+        if isinstance(result, dict):
+            payloads = result.get("payloads")
+            if isinstance(payloads, list) and payloads:
+                texts = [p.get("text", "") for p in payloads if isinstance(p, dict)]
+                joined = "\n".join(t for t in texts if t)
+                if joined.strip():
+                    return joined
+    return _strip_diagnostics(stdout)
+
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _strip_diagnostics(text: str) -> str:
+    """Drop lines that look like openclaw stderr leakage from a non-JSON reply."""
+    cleaned_lines: list[str] = []
+    for line in text.splitlines():
+        stripped = _ANSI_RE.sub("", line).strip()
+        if not stripped:
+            continue
+        if any(stripped.startswith(p) for p in _NOISE_PREFIXES):
+            continue
+        cleaned_lines.append(stripped)
+    return "\n".join(cleaned_lines)
 
 
 def main(bench_name: str, agent_id: str | None = None) -> int:

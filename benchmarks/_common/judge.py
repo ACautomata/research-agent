@@ -103,7 +103,9 @@ def judge_with_agent(qa: dict, answer: str, agent_id: str = "main",
         fallback["rationale"] = f"agent judge unavailable ({e}); " + fallback["rationale"]
         return fallback
 
-    text = (out.stdout or "") + "\n" + (out.stderr or "")
+    # Only look at stdout for the JSON verdict; with --json, diagnostics
+    # are routed to stderr (per docs.openclaw.ai/tools/agent-send).
+    text = out.stdout or ""
     m = re.search(r"\{.*?\"score\".*?\}", text, re.S)
     if not m:
         fallback = judge_with_rules(answer, qa)

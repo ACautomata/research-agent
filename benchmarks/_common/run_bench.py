@@ -37,7 +37,17 @@ else:
 ROOT = Path(__file__).resolve().parent.parent.parent
 
 
-def load_qa(path: Path) -> list[dict]:
+def _substitute_run_id(value, run_id: str):
+    if isinstance(value, str):
+        return value.replace("bench-<run>", f"bench-{run_id}").replace("<run>", run_id)
+    if isinstance(value, list):
+        return [_substitute_run_id(v, run_id) for v in value]
+    if isinstance(value, dict):
+        return {k: _substitute_run_id(v, run_id) for k, v in value.items()}
+    return value
+
+
+def load_qa(path: Path, run_id: str | None = None) -> list[dict]:
     qas: list[dict] = []
     for i, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
         line = line.strip()
@@ -49,6 +59,8 @@ def load_qa(path: Path) -> list[dict]:
         qa.setdefault("pass_threshold", 0.5)
         qa.setdefault("weight", 1.0)
         qa.setdefault("judge", "rules")
+        if run_id:
+            qa = _substitute_run_id(qa, run_id)
         qas.append(qa)
     return qas
 
@@ -206,6 +218,25 @@ def _strip_diagnostics(text: str) -> str:
     return "\n".join(cleaned_lines)
 
 
+
+def validate_expected_artifacts(container: str, qa: dict) -> tuple[bool, list[str]]:
+    expected = qa.get("expected_artifacts") or []
+    if not expected:
+        return True, []
+    missing: list[str] = []
+    for artifact in expected:
+        artifact_path = str(artifact).strip().lstrip("/")
+        if not artifact_path:
+            continue
+        proc = subprocess.run(
+            ["docker", "exec", container, "bash", "-lc",
+             f"test -s {json.dumps('/home/node/.openclaw/' + artifact_path)}"],
+            capture_output=True, text=True, timeout=30,
+        )
+        if proc.returncode != 0:
+            missing.append(artifact_path)
+    return not missing, missing
+
 def main(bench_name: str, agent_id: str | None = None) -> int:
     """Run a benchmark. `agent_id` is the CI-side caller; the contract forces
     this to `main`. Per-QA sub-agent routing goes through `target_agent`."""
@@ -232,39 +263,53 @@ def main(bench_name: str, agent_id: str | None = None) -> int:
                   "pass_rate": 0.0, "avg_score": 0.0, "results": [],
                   "skipped": "no container"}
     else:
-        qas = load_qa(qa_path)
+        qas = load_qa(qa_path, run_id)
         results: list[dict] = []
         for qa in qas:
             t0 = time.time()
             answer, session_key = run_agent(container, agent_id, qa, run_id, model)
             elapsed = time.time() - t0
             mode = qa.get("judge", "rules")
-            # LLM judge still calls main for consistency with the dispatch path.
-            verdict = (judge_with_agent(qa, answer, agent_id="main", model=model)
-                       if mode == "agent" else judge_with_rules(answer, qa))
+            if mode == "skip":
+                verdict = {"score": None, "pass": None, "rationale": "judge skipped by QA"}
+            else:
+                # LLM judge still calls main for consistency with the dispatch path.
+                verdict = (judge_with_agent(qa, answer, agent_id="main", model=model, container=container)
+                           if mode == "agent" else judge_with_rules(answer, qa))
+                artifacts_ok, missing_artifacts = validate_expected_artifacts(container, qa)
+                if not artifacts_ok:
+                    verdict = dict(verdict)
+                    verdict["score"] = 0.0
+                    verdict["pass"] = False
+                    verdict["rationale"] = (verdict.get("rationale", "") +
+                                            f"; missing expected_artifacts={missing_artifacts[:5]}")
             # Debug: surface the first 200 chars of the agent's reply so
             # zero-score failures are easy to diagnose from CI logs.
             head = (answer or "").replace("\n", "\\n")[:200]
-            print(f"  [{qa['qa_id']}] score={verdict.get('score', 0):.3f} "
-                  f"pass={verdict.get('pass', False)} "
+            score_for_log = verdict.get("score")
+            score_text = "skip" if score_for_log is None else f"{score_for_log:.3f}"
+            print(f"  [{qa['qa_id']}] score={score_text} "
+                  f"pass={verdict.get('pass')} "
                   f"len(answer)={len(answer or '')} head={head!r}",
                   file=sys.stderr)
             results.append({
                 "qa_id": qa["qa_id"], "task_type": qa.get("task_type"),
                 "target_agent": qa.get("target_agent"),
                 "weight": qa.get("weight", 1.0),
-                "score": verdict.get("score", 0.0), "pass": verdict.get("pass", False),
+                "score": verdict.get("score"), "pass": verdict.get("pass"),
+                "judge": mode, "skipped": mode == "skip",
                 "rationale": verdict.get("rationale", ""),
                 "elapsed_seconds": round(elapsed, 1),
                 "session_key": session_key, "raw_output": answer[:2000],
             })
-        weight_total = sum(r["weight"] for r in results) or 1.0
-        weighted = sum(r["score"] * r["weight"] for r in results) / weight_total
-        passed = sum(1 for r in results if r["pass"])
+        scored_results = [r for r in results if not r.get("skipped")]
+        weight_total = sum(r["weight"] for r in scored_results) or 1.0
+        weighted = sum((r["score"] or 0.0) * r["weight"] for r in scored_results) / weight_total
+        passed = sum(1 for r in scored_results if r["pass"])
         report = {
             "benchmark": bench_name, "agent": agent_id, "run_id": run_id,
-            "model": model or "default", "total": len(results), "passed": passed,
-            "pass_rate": passed / len(results) if results else 0.0,
+            "model": model or "default", "total": len(scored_results), "passed": passed, "skipped": len(results) - len(scored_results),
+            "pass_rate": passed / len(scored_results) if scored_results else 0.0,
             "avg_score": round(weighted, 4), "results": results,
         }
     report_path.parent.mkdir(parents=True, exist_ok=True)

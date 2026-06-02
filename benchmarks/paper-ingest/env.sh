@@ -4,6 +4,12 @@
 # autoresearch agent can be told to ingest it.
 set -euo pipefail
 
+RUNTIME_ENV="${BENCH_ENV_FILE:-$(cd "$(dirname "$0")/../.." && pwd)/.bench-runtime/bench-runtime-env.sh}"
+if [[ -f "${RUNTIME_ENV}" ]]; then
+  # shellcheck disable=SC1090
+  . "${RUNTIME_ENV}"
+fi
+
 : "${BENCH_CONTAINER:?must be exported by env_setup.sh}"
 : "${BENCH_MOUNT:?must be exported by env_setup.sh}"
 : "${BENCH_RUN_ID:=local}"
@@ -31,6 +37,16 @@ to wiki/log.md.
 '
 echo "${FIXTURE}" | docker exec -i "${BENCH_CONTAINER}" bash -lc \
   "cat > ${TARGET}/benchingest.md"
+
+
+log "staging existing gnn-regularization wiki fixture"
+docker exec "${BENCH_CONTAINER}" mkdir -p \
+  "${BENCH_MOUNT}/workspace-autoresearch/wiki/domains/gnn-regularization/papers"
+docker exec "${BENCH_CONTAINER}" bash -lc "cat > ${BENCH_MOUNT}/workspace-autoresearch/wiki/domains/gnn-regularization/papers/gated-attention.md" <<'EOF'
+# Gated attention
+
+A gated attention paper evaluated on heterophilous Chameleon. Evidence is limited because it uses a single heterophilous dataset.
+EOF
 
 log "staging qa.jsonl"
 docker exec "${BENCH_CONTAINER}" mkdir -p \

@@ -7,6 +7,12 @@
 # to look).
 set -euo pipefail
 
+RUNTIME_ENV="${BENCH_ENV_FILE:-$(cd "$(dirname "$0")/../.." && pwd)/.bench-runtime/bench-runtime-env.sh}"
+if [[ -f "${RUNTIME_ENV}" ]]; then
+  # shellcheck disable=SC1090
+  . "${RUNTIME_ENV}"
+fi
+
 : "${BENCH_CONTAINER:?must be exported by env_setup.sh}"
 : "${BENCH_MOUNT:?must be exported by env_setup.sh}"
 : "${BENCH_RUN_ID:=local}"
@@ -15,8 +21,9 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 log() { printf '\n[idea-generation.env] %s\n' "$*"; }
 
 TARGET="${BENCH_MOUNT}/workspace-idea-generate/bench-fixtures/bench-${BENCH_RUN_ID}/paper"
+SINGLE_TARGET="${BENCH_MOUNT}/workspace-idea-generate/bench-fixtures/bench-${BENCH_RUN_ID}/single-paper"
 log "staging paper fixture at ${TARGET}"
-docker exec "${BENCH_CONTAINER}" mkdir -p "${TARGET}"
+docker exec "${BENCH_CONTAINER}" mkdir -p "${TARGET}" "${SINGLE_TARGET}"
 
 PAPER_A='---
 title: "TinyRec: A Toy Recommender Note"
@@ -35,7 +42,7 @@ year: 2026
 We replace dense item tower with top-k sparse routing (k=8). On the same
 MovieLens-1M split we get Recall@20 = 0.16, but inference FLOPs drop 40%.
 '
-echo "${PAPER_A}" | docker exec -i "${BENCH_CONTAINER}" bash -lc "cat > ${TARGET}/tinyrec.md"
+echo "${PAPER_A}" | docker exec -i "${BENCH_CONTAINER}" bash -lc "cat > ${TARGET}/tinyrec.md && cat > ${SINGLE_TARGET}/tinyrec.md"
 echo "${PAPER_B}" | docker exec -i "${BENCH_CONTAINER}" bash -lc "cat > ${TARGET}/sparserec.md"
 
 log "staging qa.jsonl"

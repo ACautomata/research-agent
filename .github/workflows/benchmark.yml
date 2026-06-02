@@ -18,6 +18,10 @@ permissions:
 jobs:
   benchmark:
     name: "Run OpenClaw benchmarks"
+    if: >-
+      github.event_name != 'pull_request' ||
+      (!github.event.pull_request.head.repo.fork &&
+       contains(github.event.pull_request.labels.*.name, 'run-benchmarks'))
     runs-on: ubuntu-latest
     timeout-minutes: 120
 
@@ -27,7 +31,7 @@ jobs:
       BENCH_RESULTS_DIR: bench-results
       BENCH_TARGETS: "idea-generate paper-review paper-review-pipeline paper-ingest idea-generation autoresearch"
       # Pin the upstream image. Override via repo variable OPENCLAW_IMAGE.
-      OPENCLAW_IMAGE_DEFAULT: "acautomata/openclaw-docker-cn-im:latest"
+      OPENCLAW_IMAGE_DEFAULT: "justlikemaki/openclaw-docker-cn-im:latest"
 
     steps:
       - name: "Checkout"
@@ -56,12 +60,14 @@ jobs:
         env:
           MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
           MINIMAX_BASE_URL: ${{ secrets.MINIMAX_BASE_URL }}
+          BENCH_OPENCLAW_IMAGE: ${{ vars.OPENCLAW_IMAGE || env.OPENCLAW_IMAGE_DEFAULT }}
+          OPENCLAW_IMAGE: ${{ vars.OPENCLAW_IMAGE || env.OPENCLAW_IMAGE_DEFAULT }}
         run: |
           set -euo pipefail
           mkdir -p .bench-runtime
           python3 - <<'PYEOF'
           import os, pathlib
-          image = os.environ.get("OPENCLAW_IMAGE") or "acautomata/openclaw-docker-cn-im:latest"
+          image = os.environ.get("BENCH_OPENCLAW_IMAGE") or os.environ.get("OPENCLAW_IMAGE") or "justlikemaki/openclaw-docker-cn-im:latest"
           data = [
               "OPENCLAW_IMAGE=" + image,
               "OPENCLAW_DATA_DIR=" + os.environ.get("GITHUB_WORKSPACE", ".") + "/.bench-runtime/openclaw-data",
@@ -96,6 +102,8 @@ jobs:
         env:
           MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
           MINIMAX_BASE_URL: ${{ secrets.MINIMAX_BASE_URL }}
+          BENCH_OPENCLAW_IMAGE: ${{ vars.OPENCLAW_IMAGE || env.OPENCLAW_IMAGE_DEFAULT }}
+          OPENCLAW_IMAGE: ${{ vars.OPENCLAW_IMAGE || env.OPENCLAW_IMAGE_DEFAULT }}
         run: |
           bash benchmarks/_common/env_setup.sh
 
@@ -119,6 +127,8 @@ jobs:
           BENCH_CONTAINER: ${{ env.BENCH_CONTAINER }}
           BENCH_MOUNT: ${{ env.BENCH_MOUNT }}
           BENCH_OPENCLAW: openclaw
+          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+          MINIMAX_BASE_URL: ${{ secrets.MINIMAX_BASE_URL }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BENCH_REPO: ${{ github.repository }}
           BENCH_PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -152,6 +162,10 @@ jobs:
               exit 1
             fi
             python3 "benchmarks/$bench/metrics.py"
+            if [ ! -s "bench-results/$bench.json" ]; then
+              echo "::error::$bench metrics.py did not write bench-results/$bench.json"
+              exit 1
+            fi
           done
 
       - name: "Aggregate results and post PR comment"

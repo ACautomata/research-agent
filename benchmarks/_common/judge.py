@@ -39,7 +39,15 @@ def _extract_must_contain(gold: Any) -> list[str]:
     if isinstance(gold, dict):
         out = list(gold.get("must_contain") or [])
         out += list(gold.get("fields") or [])
-        return [str(t) for t in out if str(t).strip()]
+        seen: set[str] = set()
+        deduped: list[str] = []
+        for token in out:
+            text = str(token).strip()
+            key = text.lower()
+            if text and key not in seen:
+                seen.add(key)
+                deduped.append(text)
+        return deduped
     return []
 
 
@@ -70,11 +78,28 @@ def judge_with_rules(answer: str, qa: dict) -> dict:
     }
 
 
+
+def _extract_payload_text(stdout: str) -> str:
+    if not stdout.strip():
+        return ""
+    try:
+        data = json.loads(stdout)
+    except json.JSONDecodeError:
+        return stdout
+    if isinstance(data, dict):
+        for payloads in (data.get("payloads"), (data.get("result") or {}).get("payloads") if isinstance(data.get("result"), dict) else None):
+            if isinstance(payloads, list):
+                text = "\n".join(str(p.get("text", "")) for p in payloads if isinstance(p, dict) and p.get("text"))
+                if text.strip():
+                    return text
+    return stdout
+
 # --- LLM judge ---------------------------------------------------------------
 
 
 def judge_with_agent(qa: dict, answer: str, agent_id: str = "main",
-                     model: str | None = None, timeout: int = 600) -> dict:
+                     model: str | None = None, timeout: int = 600,
+                     container: str | None = None) -> dict:
     """Run a one-shot LLM judge via the openclaw CLI.
 
     The judge prompt asks for a JSON verdict: {"score": 0-1, "rationale": "..."}.
@@ -91,8 +116,12 @@ def judge_with_agent(qa: dict, answer: str, agent_id: str = "main",
         f"CANDIDATE:\n{(answer or '')[:8000]}\n"
     )
 
-    cmd = ["openclaw", "agent", "--agent", agent_id, "--message", prompt, "--json", "--local",
-           "--session-key", f"agent:{agent_id}:bench-judge-{os.getpid()}", "--timeout", str(timeout)]
+    inner_cmd = ["openclaw", "agent", "--agent", agent_id, "--message", prompt, "--json", "--local",
+                 "--session-key", f"agent:{agent_id}:bench-judge-{os.getpid()}", "--timeout", str(timeout)]
+    if container:
+        cmd = ["docker", "exec", "-i", "-e", "MINIMAX_API_KEY", "-e", "MINIMAX_BASE_URL", container] + inner_cmd
+    else:
+        cmd = inner_cmd
     if model:
         cmd += ["--model", model]
     try:
@@ -104,8 +133,9 @@ def judge_with_agent(qa: dict, answer: str, agent_id: str = "main",
         return fallback
 
     # Only look at stdout for the JSON verdict; with --json, diagnostics
-    # are routed to stderr (per docs.openclaw.ai/tools/agent-send).
-    text = out.stdout or ""
+    # are routed to stderr. Extract payload text first because openclaw wraps
+    # the agent's textual verdict in an outer JSON payloads[].text object.
+    text = _extract_payload_text(out.stdout or "")
     m = re.search(r"\{.*?\"score\".*?\}", text, re.S)
     if not m:
         fallback = judge_with_rules(answer, qa)

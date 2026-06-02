@@ -5,6 +5,12 @@
 # wiki so the agent has something concrete to reference.
 set -euo pipefail
 
+RUNTIME_ENV="${BENCH_ENV_FILE:-$(cd "$(dirname "$0")/../.." && pwd)/.bench-runtime/bench-runtime-env.sh}"
+if [[ -f "${RUNTIME_ENV}" ]]; then
+  # shellcheck disable=SC1090
+  . "${RUNTIME_ENV}"
+fi
+
 : "${BENCH_CONTAINER:?must be exported by env_setup.sh}"
 : "${BENCH_MOUNT:?must be exported by env_setup.sh}"
 : "${BENCH_RUN_ID:=local}"

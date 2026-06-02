@@ -14,7 +14,7 @@ SRC = ROOT / "benchmarks" / "paper-review" / "seed_qa.json"
 DST = ROOT / "benchmarks" / "paper-review" / "qa.jsonl"
 
 SKILL_TO_TARGET = {
-    "wiki-organizer": "paper-review",
+    "wiki-organizer": "autoresearch",
     "experiment-extractor": "paper-review",
     "problem-analyzer": "paper-review",
     "validation-designer": "paper-review",
@@ -37,7 +37,7 @@ def convert(item: dict) -> dict:
         "input_material": item.get("input_material", ""),
         "question": item.get("question", ""),
         "expected_artifacts": [f"workspace-paper-review/outputs/bench-<run>/{item['id']}.md"],
-        "gold_answer": {"must_contain": must + fields, "fields": fields,
+        "gold_answer": {"must_contain": must, "fields": fields,
                         "key_behavior": sa.get("key_behavior", "")},
         "rubric": sa.get("key_behavior", "Match the must_contain and key_behavior."),
         "rubric_dimensions": item.get("dimensions", []),

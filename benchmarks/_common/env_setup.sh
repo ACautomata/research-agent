@@ -20,12 +20,21 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 COMPOSE_FILE="${BENCH_COMPOSE_FILE:-${ROOT}/docker/docker-compose.bench.yml}"
-IMAGE="${BENCH_OPENCLAW_IMAGE:-acautomata/openclaw-docker-cn-im:latest}"
+IMAGE="${BENCH_OPENCLAW_IMAGE:-justlikemaki/openclaw-docker-cn-im:latest}"
 RUN_ID="${BENCH_RUN_ID:-local-$$}"
 COMPOSE_PROJECT="openclaw-bench-${RUN_ID}"
 
 log() { printf '\n[env_setup] %s\n' "$*"; }
 die() { printf '\n[env_setup][FATAL] %s\n' "$*" >&2; exit 1; }
+
+LOCAL_ENV_FILE="${ROOT}/docker/.env.bench"
+if [[ -f "${LOCAL_ENV_FILE}" ]]; then
+  log "loading local benchmark env ${LOCAL_ENV_FILE}"
+  set -a
+  # shellcheck disable=SC1090
+  . "${LOCAL_ENV_FILE}"
+  set +a
+fi
 
 # 0. Secrets check
 if [[ -z "${MINIMAX_API_KEY:-}" ]]; then
@@ -71,6 +80,22 @@ mkdir -p "${ENV_DIR}/openclaw-data"
 log "pulling ${IMAGE}"
 docker pull "${IMAGE}" >/dev/null
 
+copy_repo_to_data_dir() {
+  local dest="$1"
+  log "pre-populating ${dest} with benchmark repo config/workspaces"
+  mkdir -p "${dest}"
+  find "${dest}" -mindepth 1 -delete 2>/dev/null || true
+  tar --exclude='.git' --exclude='.github' --exclude='.env' \
+      --exclude='docker/.env.bench' --exclude='*.sqlite*' \
+      --exclude='qmd' --exclude='logs' --exclude='tasks' \
+      --exclude='credentials' --exclude='cron' --exclude='devices' \
+      --exclude='identity' --exclude='feishu' --exclude='extensions' \
+      --exclude='qqbot' --exclude='.openclaw' --exclude='.dreams' \
+      --exclude='dreaming' --exclude='.bench-runtime' \
+      --exclude='bench-results' \
+      -C "${ROOT}" -cf - . | tar -xf - -C "${dest}"
+}
+
 # 3. Bring up the gateway service. We pass the project name to isolate the
 #    stack from any other compose project on the same host.
 #
@@ -89,6 +114,7 @@ set +a
 # but fall back to a host-local path that we create ourselves.
 : "${OPENCLAW_DATA_DIR:=${ENV_DIR}/openclaw-data}"
 mkdir -p "${OPENCLAW_DATA_DIR}"
+copy_repo_to_data_dir "${OPENCLAW_DATA_DIR}"
 docker compose --project-name "${COMPOSE_PROJECT}" \
     -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" \
     up -d openclaw-bench
@@ -116,6 +142,7 @@ docker exec "${CONTAINER}" bash -lc '
 # Stream a tarball of the repo (with the same excludes) and untar inside the
 # container. This avoids needing host-side write access to the volume.
 tar --exclude='.git' --exclude='.github' --exclude='.env' \
+    --exclude='docker/.env.bench' \
     --exclude='*.sqlite*' --exclude='qmd' --exclude='logs' \
     --exclude='tasks' --exclude='credentials' --exclude='cron' \
     --exclude='devices' --exclude='identity' --exclude='feishu' \
@@ -175,6 +202,7 @@ PY
   # is new, but container_name=openclaw-bench is stable) and re-wait for
   # the gateway ready marker before re-patching.
   sleep 3
+  RESTART_READY=0
   for i in $(seq 1 60); do
     STATE="$(docker inspect --format '{{.State.Running}}' openclaw-bench 2>/dev/null || true)"
     if [[ "${STATE}" != "true" ]]; then
@@ -183,11 +211,17 @@ PY
     # Use --since to only match logs from AFTER the restart, avoiding false
     # positives from the first run's "http server listening" line.
     if docker logs --since 10s --tail 20 openclaw-bench 2>&1 | grep -qE 'http server listening|heartbeat.*started'; then
+      RESTART_READY=1
       log "gateway ready after restart (poll $i)"
       break
     fi
     sleep 2
   done
+  if [[ "${RESTART_READY}" -ne 1 ]]; then
+    echo "[env_setup][FATAL] gateway not ready after restart; dumping logs:" >&2
+    docker logs --tail 200 openclaw-bench >&2 || true
+    exit 1
+  fi
   patch_secret_ref
   log "post-restart SecretRef:"
   docker exec openclaw-bench python3 -c \
@@ -227,6 +261,15 @@ for i in $(seq 1 90); do
 done
 if [[ "${READY}" -ne 1 ]]; then
   echo "[env_setup][FATAL] gateway not ready in 180s" >&2
+  docker logs --tail 200 "${CONTAINER}" >&2 || true
+  exit 1
+fi
+
+log "running main-agent smoke check"
+if ! docker exec -e MINIMAX_API_KEY -e MINIMAX_BASE_URL "${CONTAINER}" \
+  openclaw agent --agent main --message "ping" --local --json \
+  --session-key "agent:main:bench-${RUN_ID}-smoke" --timeout 120 >/dev/null; then
+  echo "[env_setup][FATAL] main-agent smoke check failed; dumping logs:" >&2
   docker logs --tail 200 "${CONTAINER}" >&2 || true
   exit 1
 fi

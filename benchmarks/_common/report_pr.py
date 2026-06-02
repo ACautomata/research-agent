@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import glob
 import json
+import base64
 import os
 import subprocess
 import sys
@@ -109,7 +110,7 @@ def post_comment(body: str) -> bool:
         return False
 
     # List comments, look for one with our marker, edit or create.
-    list_cmd = ["gh", "api", f"repos/{repo}/issues/{pr}/comments", "--paginate"]
+    list_cmd = ["gh", "api", f"repos/{repo}/issues/{pr}/comments", "--paginate", "--slurp"]
     env = os.environ.copy()
     env["GH_TOKEN"] = token
     try:
@@ -118,6 +119,8 @@ def post_comment(body: str) -> bool:
         return False
     try:
         comments = json.loads(out.stdout or "[]")
+        if comments and isinstance(comments[0], list):
+            comments = [item for page in comments for item in page]
     except json.JSONDecodeError:
         comments = []
     existing_id = None
@@ -143,10 +146,24 @@ def post_comment(body: str) -> bool:
 
 def main() -> int:
     results_dir = Path(os.environ.get("BENCH_RESULTS_DIR", "bench-results"))
-    base_path = os.environ.get("BENCH_BASE_SUMMARY")
+    base_value = os.environ.get("BENCH_BASE_SUMMARY")
     base = None
-    if base_path and Path(base_path).exists():
-        base = _load(Path(base_path))
+    if base_value:
+        try:
+            is_path = Path(base_value).exists()
+        except OSError:
+            is_path = False
+        if is_path:
+            base = _load(Path(base_value))
+        else:
+            try:
+                decoded = base64.b64decode(base_value).decode("utf-8")
+                base = json.loads(decoded)
+            except Exception:
+                try:
+                    base = json.loads(base_value)
+                except json.JSONDecodeError:
+                    base = None
     body = render(results_dir, base)
     if not post_comment(body):
         # Always print the body so CI logs and artifact capture it.

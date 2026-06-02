@@ -77,6 +77,7 @@ jobs:
               "PRIMARY_MODEL=minimax/MiniMax-M2.7",
               "BASE_URL=" + (os.environ.get("MINIMAX_BASE_URL") or "https://api.minimaxi.com"),
               "API_KEY=" + os.environ["MINIMAX_API_KEY"],
+              "MINIMAX_API_KEY=" + os.environ["MINIMAX_API_KEY"],
               "API_PROTOCOL=anthropic",
               "CONTEXT_WINDOW=200000",
               "MAX_TOKENS=8192",

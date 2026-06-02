@@ -54,6 +54,7 @@ MODEL_ID=minimax/MiniMax-M2.7
 PRIMARY_MODEL=minimax/MiniMax-M2.7
 BASE_URL=${MINIMAX_BASE_URL}
 API_KEY=${MINIMAX_API_KEY}
+MINIMAX_API_KEY=${MINIMAX_API_KEY}
 API_PROTOCOL=anthropic
 CONTEXT_WINDOW=200000
 MAX_TOKENS=8192
@@ -175,7 +176,13 @@ PY
   # the gateway ready marker before re-patching.
   sleep 3
   for i in $(seq 1 60); do
-    if docker logs --tail 200 openclaw-bench 2>&1 | grep -qE 'http server listening|heartbeat.*started'; then
+    STATE="$(docker inspect --format '{{.State.Running}}' openclaw-bench 2>/dev/null || true)"
+    if [[ "${STATE}" != "true" ]]; then
+      die "container openclaw-bench exited after restart (state=${STATE})"
+    fi
+    # Use --since to only match logs from AFTER the restart, avoiding false
+    # positives from the first run's "http server listening" line.
+    if docker logs --since 10s --tail 20 openclaw-bench 2>&1 | grep -qE 'http server listening|heartbeat.*started'; then
       log "gateway ready after restart (poll $i)"
       break
     fi

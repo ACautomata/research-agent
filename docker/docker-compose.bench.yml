@@ -1,0 +1,55 @@
+# CI/CD benchmark compose profile.
+# Mirrors the upstream openclaw-docker-cn-im structure but with ALL channels,
+# plugins, and sandbox mode disabled, and bind restricted to loopback.
+# Only the LLM provider is wired in.
+services:
+  openclaw-bench:
+    container_name: openclaw-bench
+    image: ${OPENCLAW_IMAGE}
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+    user: ${OPENCLAW_RUN_USER:-0:0}
+    environment:
+      TZ: Asia/Shanghai
+      HOME: /home/node
+      TERM: xterm-256color
+      NODE_ENV: production
+      LANG: en_US.UTF-8
+      LANGUAGE: en_US:en
+      LC_ALL: en_US.UTF-8
+      # Sync flags
+      SYNC_OPENCLAW_CONFIG: "false"
+      SYNC_EXTENSIONS_ON_START: "false"
+      SYNC_EXTENSIONS_MODE: "none"
+      SYNC_MODEL_CONFIG: "true"
+      # Model
+      MODEL_ID: ${MODEL_ID}
+      PRIMARY_MODEL: ${PRIMARY_MODEL}
+      BASE_URL: ${BASE_URL}
+      API_KEY: ${API_KEY}
+      API_PROTOCOL: ${API_PROTOCOL}
+      CONTEXT_WINDOW: ${CONTEXT_WINDOW}
+      MAX_TOKENS: ${MAX_TOKENS}
+      # Channels: explicitly disabled so the gateway never tries to dial out.
+      DM_POLICY: disabled
+      GROUP_POLICY: disabled
+      ALLOW_FROM: ""
+      # Workspace
+      OPENCLAW_WORKSPACE_ROOT: ${OPENCLAW_WORKSPACE_ROOT}
+      # Sandbox off in CI
+      OPENCLAW_SANDBOX_MODE: off
+      OPENCLAW_PLUGINS_ENABLED: "false"
+    volumes:
+      - ${OPENCLAW_DATA_DIR}:/home/node/.openclaw
+    ports:
+      - "${DOCKER_BIND:-127.0.0.1}:${OPENCLAW_GATEWAY_PORT:-18789}:${OPENCLAW_GATEWAY_PORT:-18789}"
+    init: true
+    restart: "no"
+    healthcheck:
+      test: ["CMD-SHELL", "command -v openclaw >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 6

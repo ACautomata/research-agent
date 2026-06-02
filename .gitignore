@@ -73,6 +73,9 @@ workspace-idea-generate/memory/dreaming/
 # === Benchmark runtime artifacts ===
 benchmarks/**/results/
 benchmarks/**/output/
+benchmarks/**/bench-report.json
+bench-results/
+.bench-runtime/
 **/__pycache__/
 
 # === Sensitive user data ===

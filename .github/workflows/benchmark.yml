@@ -1,0 +1,154 @@
+name: Benchmark
+
+on:
+  # Run on every PR push (open / reopen / new commit / draft -> ready).
+  # `synchronize` fires for every new commit pushed to the PR branch.
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  benchmark:
+    name: "Run OpenClaw benchmarks"
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    env:
+      BENCH_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+      BENCH_COMMIT: ${{ github.sha }}
+      BENCH_RESULTS_DIR: bench-results
+      BENCH_TARGETS: "idea-generate paper-review paper-review-pipeline paper-ingest idea-generation autoresearch"
+      # Pin the upstream image. Override via repo variable OPENCLAW_IMAGE.
+      OPENCLAW_IMAGE_DEFAULT: "ACAutomata/openclaw-docker-cn-im:latest"
+
+    steps:
+      - name: "Checkout"
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: "Verify required secrets"
+        env:
+          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+        run: |
+          if [ -z "${MINIMAX_API_KEY:-}" ]; then
+            echo "::error::MINIMAX_API_KEY is not configured. Add it to repo Settings -> Secrets and variables -> Actions before running benchmarks." >&2
+            exit 1
+          fi
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: "Set up Docker Buildx"
+        uses: docker/setup-buildx-action@v3
+
+      - name: "Render docker env file from secrets"
+        env:
+          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+          MINIMAX_BASE_URL: ${{ secrets.MINIMAX_BASE_URL }}
+        run: |
+          set -euo pipefail
+          mkdir -p .bench-runtime
+          python3 - <<'PYEOF'
+          import os, pathlib
+          image = os.environ.get("OPENCLAW_IMAGE") or "ACAutomata/openclaw-docker-cn-im:latest"
+          data = [
+              "OPENCLAW_IMAGE=" + image,
+              "OPENCLAW_DATA_DIR=" + os.environ.get("GITHUB_WORKSPACE", ".") + "/.bench-runtime/openclaw-data",
+              "OPENCLAW_RUN_USER=0:0",
+              "DOCKER_BIND=127.0.0.1",
+              "OPENCLAW_GATEWAY_PORT=18789",
+              "OPENCLAW_GATEWAY_BIND=127.0.0.1",
+              "TZ=Asia/Shanghai",
+              "SYNC_OPENCLAW_CONFIG=false",
+              "SYNC_EXTENSIONS_ON_START=false",
+              "SYNC_MODEL_CONFIG=true",
+              "MODEL_ID=minimax/MiniMax-M2.7",
+              "PRIMARY_MODEL=minimax/MiniMax-M2.7",
+              "BASE_URL=" + (os.environ.get("MINIMAX_BASE_URL") or "https://api.minimaxi.com"),
+              "API_KEY=" + os.environ["MINIMAX_API_KEY"],
+              "API_PROTOCOL=anthropic",
+              "CONTEXT_WINDOW=200000",
+              "MAX_TOKENS=8192",
+              "DM_POLICY=disabled",
+              "GROUP_POLICY=disabled",
+              "ALLOW_FROM=",
+              "OPENCLAW_WORKSPACE_ROOT=/home/node/.openclaw",
+              "OPENCLAW_SANDBOX_MODE=off",
+              "OPENCLAW_PLUGINS_ENABLED=false",
+          ]
+          pathlib.Path(".bench-runtime/.env.bench").write_text("\n".join(data) + "\n")
+          print("wrote .bench-runtime/.env.bench (image=" + image + ")")
+          PYEOF
+
+      - name: "Unified env (pull image + docker compose up)"
+        env:
+          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+          MINIMAX_BASE_URL: ${{ secrets.MINIMAX_BASE_URL }}
+        run: |
+          bash benchmarks/_common/env_setup.sh
+
+      - name: "Sanity check docker is running"
+        run: docker ps
+
+      - name: "Run each benchmark (env.sh then metrics.py)"
+        env:
+          BENCH_CONTAINER: openclaw-bench
+          BENCH_MOUNT: /home/node/.openclaw
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BENCH_REPO: ${{ github.repository }}
+          BENCH_PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -u
+          for bench in $BENCH_TARGETS; do
+            echo "=========================================="
+            echo "benchmark: $bench"
+            echo "=========================================="
+            if ! bash "benchmarks/$bench/env.sh"; then
+              echo "::warning::$bench env.sh failed; continuing"
+              continue
+            fi
+            python3 "benchmarks/$bench/metrics.py" || true
+          done
+
+      - name: "Aggregate results and post PR comment"
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BENCH_REPO: ${{ github.repository }}
+          # BENCH_PR_NUMBER is only meaningful for pull_request events; report_pr.py
+          # detects the empty value and falls back to printing the body to stdout.
+          BENCH_PR_NUMBER: ${{ github.event.pull_request.number }}
+          BENCH_BASE_SUMMARY: ${{ secrets.BENCH_BASE_RESULTS_JSON }}
+        run: |
+          python3 benchmarks/_common/report_pr.py
+
+      - name: "Upload bench-results as artifact"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-results-${{ github.run_id }}
+          path: |
+            bench-results/
+            benchmarks/*/bench-report.json
+          if-no-files-found: warn
+
+      - name: "Tear down compose stack"
+        if: always()
+        run: |
+          if [ -n "${BENCH_COMPOSE_PROJECT:-}" ]; then
+            docker compose --project-name "${BENCH_COMPOSE_PROJECT}" \
+              -f docker/docker-compose.bench.yml \
+              --env-file .bench-runtime/.env.bench \
+              down -v --remove-orphans || true
+          fi

@@ -139,40 +139,38 @@ log "repo copied into container"
 # noisily with 'No API key found for provider "minimax"' if the secret
 # is missing.
 if [[ -n "${MINIMAX_API_KEY:-}" ]]; then
-  log "writing auth-profiles.json (env-var reference, no secret in file)"
-  # Per docs.openclaw.ai/concepts/oauth, the `key` field in
-  # auth-profiles.json is the *name of an environment variable* that
-  # openclaw will read at runtime -- NOT the secret value itself. So we
-  # write a tiny JSON that points at $MINIMAX_API_KEY, and the file
-  # contains no secret material. init.sh already forwards
-  # $MINIMAX_API_KEY into the container's env, but the gateway's
-  # credential lookup reads from this file's `key` field name.
-  docker exec -e MINIMAX_API_KEY \
-    "${CONTAINER}" bash -lc '
-      export HOME=/home/node
-      mkdir -p /home/node/.openclaw/agents/main/agent
-      # Build the JSON with jq-style escaping. Using printf + sed keeps
-      # the file structure static (no $MINIMAX_API_KEY interpolation that
-      # could leak the secret into argv or logs).
-      cat > /home/node/.openclaw/agents/main/agent/auth-profiles.json <<'\''JSON'\''
-{
-  "version": 1,
-  "profiles": {
-    "minimax:default": {
-      "type": "api_key",
-      "provider": "minimax",
-      "key": "MINIMAX_API_KEY"
-    }
-  }
-}
-JSON
-      chown -R 1000:1000 /home/node/.openclaw/agents/main/agent
-      chmod 600 /home/node/.openclaw/agents/main/agent/auth-profiles.json
-      echo "wrote auth-profiles.json:"
-      ls -la /home/node/.openclaw/agents/main/agent/
-    ' || true
+  log "patching auth.profiles.minimax:cn.key in /home/node/.openclaw/openclaw.json"
+  # The image's init.sh rebuilds openclaw.json from env vars each time the
+  # gateway boots, and the resulting file does NOT include the
+  # auth.profiles.minimax:cn.key field (which tells openclaw which env var
+  # holds the API key). Without that field, the gateway reports
+  # "No API key found for provider \"minimax\"" for every QA.
+  #
+  # The key field, per docs.openclaw.ai/concepts/oauth, holds the NAME
+  # of the env var (not the secret value), so this patch is safe to apply
+  # even with MINIMAX_API_KEY forwarded by the workflow. We use a python
+  # one-liner so the JSON merge is clean and we never write the secret
+  # itself into the file.
+  docker exec "${CONTAINER}" bash -lc '
+    export HOME=/home/node
+    python3 - <<'\''PY'\''
+import json, os, pathlib
+p = pathlib.Path("/home/node/.openclaw/openclaw.json")
+data = json.loads(p.read_text(encoding="utf-8"))
+auth = data.setdefault("auth", {})
+profiles = auth.setdefault("profiles", {})
+entry = profiles.setdefault("minimax:cn", {"provider": "minimax", "mode": "api_key"})
+# Always overwrite the key field to point at the canonical env var name.
+entry["key"] = "MINIMAX_API_KEY"
+p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+print("auth.profiles now:", auth)
+PY
+    chown -R 1000:1000 /home/node/.openclaw/openclaw.json
+    echo "patched:"
+    grep -A1 "minimax:cn" /home/node/.openclaw/openclaw.json | head -4
+  ' || true
 else
-  log "MINIMAX_API_KEY not set; skipping explicit auth-profiles write"
+  log "MINIMAX_API_KEY not set; skipping auth profile patch"
 fi
 
 # 6. Wait for the openclaw container to start and the gateway to become

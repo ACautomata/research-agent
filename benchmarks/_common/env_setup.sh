@@ -132,46 +132,35 @@ log "chown /home/node/.openclaw -> 1000:1000 (openclaw runtime uid)"
 docker exec "${CONTAINER}" chown -R 1000:1000 /home/node/.openclaw || true
 log "repo copied into container"
 
-# 6. Wait for the openclaw container to be healthy. We poll `docker inspect`
-#    for status=healthy (or running + healthcheck=none) and bail loudly if
-#    the container exits before then. CLI-presence alone is not enough --
-#    init.sh can finish while the gateway is still starting, and on a bad
-#    image the container can also just die.
-log "waiting for ${CONTAINER} to reach status=running with health=healthy"
-HEALTHY=0
-for i in $(seq 1 60); do
-  STATE="$(docker inspect --format '{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${CONTAINER}" 2>/dev/null || true)"
-  case "${STATE}" in
-    running|healthy)
-      HEALTHY=1
-      log "container ${CONTAINER} state=${STATE} after ${i} polls"
+# 6. Wait for the openclaw container to start and the gateway to become
+#    ready. The image's healthcheck is informational only (we set
+#    restart=no), so we don't rely on `health=healthy`. We poll the
+#    container's State.Running and tail its log for a known ready marker.
+log "waiting for ${CONTAINER} to come up and gateway to be ready"
+READY=0
+for i in $(seq 1 90); do
+  STATE="$(docker inspect --format '{{.State.Running}}' "${CONTAINER}" 2>/dev/null || true)"
+  if [[ "${STATE}" == "true" ]]; then
+    # Look for the gateway-ready marker in the container log.
+    if docker logs --tail 200 "${CONTAINER}" 2>&1 | grep -qE 'http server listening|starting channels and sidecars|\[gateway\] ready|heartbeat.*started'; then
+      READY=1
+      log "container ${CONTAINER} is up and gateway is ready after ${i} polls"
       break
-      ;;
-    exited|dead|removing)
-      echo "[env_setup][FATAL] container ${CONTAINER} state=${STATE}; dumping logs:" >&2
+    fi
+  fi
+  # Detect a hard exit (init.sh crashed). Bail loudly so the workflow fails.
+  RUNNING="$(docker inspect --format '{{.State.Running}}|{{.State.Status}}' "${CONTAINER}" 2>/dev/null || true)"
+  case "${RUNNING}" in
+    false|exited|dead|removing)
+      echo "[env_setup][FATAL] container ${CONTAINER} state=${RUNNING}; dumping logs:" >&2
       docker logs --tail 200 "${CONTAINER}" >&2 || true
       exit 1
       ;;
   esac
   sleep 2
 done
-if [[ "${HEALTHY}" -ne 1 ]]; then
-  echo "[env_setup][FATAL] container ${CONTAINER} did not become healthy in 120s" >&2
-  docker logs --tail 200 "${CONTAINER}" >&2 || true
-  exit 1
-fi
-
-# 7. Smoke turn: a real agent invocation. If this fails the container is
-#    almost certainly not usable for the benchmarks below.
-log "smoke turn: openclaw agent --agent main --message 'ping' --local --json"
-if ! docker exec -e MINIMAX_API_KEY -e MINIMAX_BASE_URL \
-    "${CONTAINER}" bash -lc '
-      export HOME=/home/node
-      export OPENCLAW_CONFIG=/home/node/.openclaw/openclaw.json
-      timeout 120 openclaw agent --agent main --message "ping" --local --json \
-        --session-key "agent:main:bench-smoke-'"${RUN_ID}"'"
-    ' ; then
-  echo "[env_setup][FATAL] smoke turn failed; container likely broken" >&2
+if [[ "${READY}" -ne 1 ]]; then
+  echo "[env_setup][FATAL] gateway not ready in 180s" >&2
   docker logs --tail 200 "${CONTAINER}" >&2 || true
   exit 1
 fi

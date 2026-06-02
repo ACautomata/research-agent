@@ -20,8 +20,10 @@ services:
       LANG: en_US.UTF-8
       LANGUAGE: en_US:en
       LC_ALL: en_US.UTF-8
-      # Sync flags
-      SYNC_OPENCLAW_CONFIG: "false"
+      # Sync flags. SYNC_OPENCLAW_CONFIG=true lets init.sh's model-config
+      # sync path read MODEL_ID/PRIMARY_MODEL/BASE_URL/API_KEY and write
+      # the auth-profiles.json the gateway actually consults at runtime.
+      SYNC_OPENCLAW_CONFIG: "true"
       SYNC_EXTENSIONS_ON_START: "false"
       SYNC_EXTENSIONS_MODE: "none"
       SYNC_MODEL_CONFIG: "true"

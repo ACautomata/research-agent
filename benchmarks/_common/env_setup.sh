@@ -132,6 +132,26 @@ log "chown /home/node/.openclaw -> 1000:1000 (openclaw runtime uid)"
 docker exec "${CONTAINER}" chown -R 1000:1000 /home/node/.openclaw || true
 log "repo copied into container"
 
+# Belt-and-suspenders: even if init.sh's config sync already wrote
+# auth-profiles.json, we re-run `openclaw models auth paste-token` so the
+# gateway's auth store definitely has the minimax credential for the
+# embedded (--local) agent calls below. This is the path that fails
+# noisily with 'No API key found for provider "minimax"' if the secret
+# is missing.
+if [[ -n "${MINIMAX_API_KEY:-}" ]]; then
+  log "writing minimax auth profile via openclaw CLI"
+  docker exec -e MINIMAX_API_KEY \
+    "${CONTAINER}" bash -lc '
+      export HOME=/home/node
+      mkdir -p /home/node/.openclaw/agents/main/agent
+      printf "%s" "$MINIMAX_API_KEY" | openclaw models auth paste-token \
+        --provider minimax --profile default \
+        || echo "openclaw models auth paste-token failed; will rely on init.sh sync"
+    ' || true
+else
+  log "MINIMAX_API_KEY not set; skipping explicit auth-profiles write"
+fi
+
 # 6. Wait for the openclaw container to start and the gateway to become
 #    ready. The image's healthcheck is informational only (we set
 #    restart=no), so we don't rely on `health=healthy`. We poll the

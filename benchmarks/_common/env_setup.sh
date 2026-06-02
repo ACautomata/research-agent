@@ -165,7 +165,10 @@ if [[ "${READY}" -ne 1 ]]; then
   exit 1
 fi
 
-# 8. Export the contract for downstream env.sh scripts.
+# 8. Export the contract for downstream env.sh scripts AND for subsequent
+#    GitHub Actions steps. We can't `export` from a subshell back into the
+#    caller, so we both export (for any subshells in this step) and write
+#    a small env file the next workflow step can `source`.
 export BENCH_CONTAINER="${CONTAINER}"
 export BENCH_MOUNT="/home/node/.openclaw"
 export BENCH_OPENCLAW="openclaw"
@@ -173,4 +176,24 @@ export BENCH_COMPOSE_PROJECT="${COMPOSE_PROJECT}"
 export BENCH_ENV_FILE="${ENV_FILE}"
 export BENCH_DATA_DIR="${ENV_DIR}/openclaw-data"
 
+# Drop a sourceable env file for subsequent workflow steps.
+EXPORT_FILE="${ENV_DIR}/bench-runtime-env.sh"
+cat >"${EXPORT_FILE}" <<EOF
+# Auto-sourced by .github/workflows/benchmark.yml after env_setup.sh.
+export BENCH_CONTAINER='${CONTAINER}'
+export BENCH_MOUNT='/home/node/.openclaw'
+export BENCH_OPENCLAW='openclaw'
+export BENCH_COMPOSE_PROJECT='${COMPOSE_PROJECT}'
+export BENCH_ENV_FILE='${ENV_FILE}'
+export BENCH_DATA_DIR='${ENV_DIR}/openclaw-data'
+EOF
+# Surface the file path so the workflow can source it without re-deriving.
+if [[ -n "${GITHUB_ENV:-}" ]]; then
+  echo "BENCH_ENV_FILE=${EXPORT_FILE}" >> "${GITHUB_ENV}"
+  echo "BENCH_CONTAINER=${CONTAINER}" >> "${GITHUB_ENV}"
+  echo "BENCH_MOUNT=/home/node/.openclaw" >> "${GITHUB_ENV}"
+  echo "BENCH_COMPOSE_PROJECT=${COMPOSE_PROJECT}" >> "${GITHUB_ENV}"
+fi
+
 log "ready: container=${BENCH_CONTAINER} mount=${BENCH_MOUNT} data_dir=${BENCH_DATA_DIR}"
+log "runtime env file: ${EXPORT_FILE}"

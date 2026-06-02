@@ -112,13 +112,25 @@ jobs:
 
       - name: "Run each benchmark (env.sh then metrics.py)"
         env:
-          BENCH_CONTAINER: openclaw-bench
-          BENCH_MOUNT: /home/node/.openclaw
+          # Pulled in by env_setup.sh via $GITHUB_ENV; env_setup also writes
+          # .bench-runtime/bench-runtime-env.sh which we source here as a
+          # belt-and-suspenders measure.
+          BENCH_CONTAINER: ${{ env.BENCH_CONTAINER }}
+          BENCH_MOUNT: ${{ env.BENCH_MOUNT }}
+          BENCH_OPENCLAW: openclaw
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BENCH_REPO: ${{ github.repository }}
           BENCH_PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -eu
+          # Belt-and-suspenders: source the runtime-env file env_setup.sh wrote
+          # so BENCH_CONTAINER is definitely populated even if the
+          # $GITHUB_ENV export didn't propagate.
+          if [ -f .bench-runtime/bench-runtime-env.sh ]; then
+            # shellcheck disable=SC1091
+            . .bench-runtime/bench-runtime-env.sh
+          fi
+          echo "BENCH_CONTAINER=${BENCH_CONTAINER:-<unset>}"
           if ! docker ps --filter name=openclaw-bench --filter status=running --format '{{.Names}}' | grep -q '^openclaw-bench$'; then
             echo "::error::openclaw-bench container died before benchmarks could run. Dumping logs:"
             docker logs openclaw-bench 2>&1 | tail -100 || true

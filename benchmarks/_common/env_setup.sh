@@ -146,14 +146,13 @@ if [[ -n "${MINIMAX_API_KEY:-}" ]]; then
   # id:"<ENV_VAR_NAME>"}. openclaw then resolves it at runtime from the
   # forwarded MINIMAX_API_KEY env var. This is the supported, secret-safe
   # path -- no real key is ever written to disk.
-  docker exec "${CONTAINER}" bash -lc '
-    export HOME=/home/node
-    REF='\''{"source":"env","provider":"default","id":"MINIMAX_API_KEY"}'\''
-    openclaw config set --json models.providers.minimax.apiKey "$REF" \
-      || echo "openclaw config set failed; falling back to JSON patch"
-    # Belt-and-suspenders: also write the same value via JSON patch in case
-    # the CLI path fails in this image version.
-    python3 - <<'\''PY'\''
+  patch_secret_ref() {
+    docker exec "${CONTAINER}" bash -lc '
+      export HOME=/home/node
+      REF='\''{"source":"env","provider":"default","id":"MINIMAX_API_KEY"}'\''
+      openclaw config set --json models.providers.minimax.apiKey "$REF" \
+        2>/dev/null || true
+      python3 - <<'\''PY'\''
 import json, pathlib
 p = pathlib.Path("/home/node/.openclaw/openclaw.json")
 data = json.loads(p.read_text(encoding="utf-8"))
@@ -161,10 +160,21 @@ prov = data.setdefault("models", {}).setdefault("providers", {}).setdefault("min
 prov["apiKey"] = {"source": "env", "provider": "default", "id": "MINIMAX_API_KEY"}
 p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 PY
-    chown -R 1000:1000 /home/node/.openclaw/openclaw.json
-    echo "patched models.providers.minimax.apiKey:"
-    python3 -c "import json; d=json.load(open(\"/home/node/.openclaw/openclaw.json\")); print(d[\"models\"][\"providers\"][\"minimax\"].get(\"apiKey\"))"
-  ' || true
+      chown -R 1000:1000 /home/node/.openclaw/openclaw.json
+    '
+  }
+  # First patch (before restart), then restart, then re-patch (init.sh
+  # regenerates openclaw.json on every container start).
+  patch_secret_ref
+  log "restarting openclaw-bench so it re-resolves the SecretRef snapshot"
+  docker compose --project-name "${COMPOSE_PROJECT}" \
+    -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" \
+    restart openclaw-bench
+  # Re-apply the patch after restart; init.sh wipes openclaw.json.
+  patch_secret_ref
+  log "post-restart SecretRef:"
+  docker exec "${CONTAINER}" python3 -c \
+    'import json; d=json.load(open("/home/node/.openclaw/openclaw.json")); print(d["models"]["providers"]["minimax"].get("apiKey"))' || true
 else
   log "MINIMAX_API_KEY not set; skipping apiKey patch"
 fi

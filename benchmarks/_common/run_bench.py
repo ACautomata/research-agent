@@ -5,10 +5,9 @@ Generic driver for any benchmark directory that follows the unified interface
 (env.sh + qa.jsonl + metrics.py).
 
 **CI policy: every benchmark task calls only the `main` agent.** The main agent is
-responsible for delegating to the appropriate sub-agent via `sessions_spawn`.
-Each QA's `target_agent` field names the sub-agent main should spawn; if
-absent, main runs the task itself. The separate CI scoring step may directly
-invoke the dedicated `reviewer` agent for `judge: "agent"`.
+responsible for deciding how to handle each task, including delegating to the
+appropriate sub-agent via `sessions_spawn` when needed. The separate CI scoring
+step may directly invoke the dedicated `reviewer` agent for `judge: "agent"`.
 
 Per-benchmark `metrics.py` becomes a 6-line shim:
 
@@ -156,10 +155,7 @@ def load_qa(path: Path) -> list[dict]:
 
 def run_agent(container: str, agent_id: str, qa: dict, run_id: str,
               model: str | None, debug_dir: Path | None = None) -> tuple[str, str, dict]:
-    """Always invokes `agent_id` (which the CI contract pins to `main`).
-    If the QA carries a `target_agent` field, the prompt is wrapped so main
-    delegates to that sub-agent via sessions_spawn and returns the sub-agent's
-    final answer.
+    """Invoke `agent_id` (pinned to `main` by CI contract) with the QA prompt.
 
     Returns (cleaned_agent_text, session_key, raw_artifacts). The third
     tuple element is a dict with the unredacted raw stdout / stderr / prompt
@@ -168,45 +164,12 @@ def run_agent(container: str, agent_id: str, qa: dict, run_id: str,
     diagnostics to stderr, so we capture them separately and only look at
     the JSON payload[].text fields for the actual agent answer.
     """
-    target = qa.get("target_agent")
     prompt = qa["question"]
     if qa.get("input_material"):
         material = qa["input_material"]
         if isinstance(material, dict):
             material = material.get("content") or Path(material["path"]).read_text(encoding="utf-8")
         prompt = f"{material}\n\n---\n\n{prompt}"
-    if target and target != agent_id:
-        prompt = (
-            f"[BENCHMARK DIRECTIVE — read carefully]\n"
-            f"This task must be executed by the `{target}` sub-agent.\n"
-            f"Step 1: Call sessions_spawn to delegate:\n"
-            f"  sessions_spawn(agentId=\"{target}\", task=<the full task below>, "
-            f"mode=\"run\", context=\"isolated\", "
-            f"runTimeoutSeconds={qa.get('timeout_seconds', 1800)})\n"
-            f"Step 2: IMMEDIATELY call sessions_yield() — this ends your turn and "
-            f"blocks until the sub-agent finishes. The sub-agent result will arrive "
-            f"as your next incoming message. Do NOT poll or guess when it finishes.\n"
-            f"sessions_spawn is non-blocking (returns a runId immediately). "
-            f"sessions_yield is the ONLY correct way to wait for the result.\n"
-            f"After the sub-agent completes, run the `reviewer` agent to audit "
-            f"the sub-agent's final reply against this benchmark directive, the "
-            f"full task, expected artifacts, gold_answer, and rubric below. "
-            f"If reviewer returns FAIL, use sessions_send(sessionKey=<same sessionKey>, "
-            f"message=<reviewer fix prompt>) to send its fix prompt back to the SAME "
-            f"sub-agent session and wait for the repaired answer, then run "
-            f"reviewer again. Do not start a new `{target}` session for fixes. "
-            f"Skip this extra review loop only when the target sub-agent itself "
-            f"is `reviewer`.\n"
-            f"Then return the reviewer-passed sub-agent final reply as your only output.\n"
-            f"Do NOT return a runId, pending status, or 'wait for completion' "
-            f"message.\n"
-            f"Do NOT solve the task yourself. Do NOT add commentary. Return the "
-            f"sub-agent's reply verbatim after it has passed reviewer.\n\n"
-            f"BENCHMARK GOLD_ANSWER: {json.dumps(qa.get('gold_answer'), ensure_ascii=False)}\n"
-            f"BENCHMARK RUBRIC: {qa.get('rubric') or '(none)'}\n"
-            f"BENCHMARK EXPECTED_ARTIFACTS: {json.dumps(qa.get('expected_artifacts'), ensure_ascii=False)}\n\n"
-            f"---\n\n{prompt}"
-        )
     # Use a never-reused key so every QA starts from an empty conversation.
     # OpenClaw documents --session-key as the explicit session selector; there
     # is no separate "new session" flag for `openclaw agent`, so freshness comes
@@ -459,8 +422,9 @@ def _extract_agent_text(stdout: str, stderr: str) -> str:
 
 def main(bench_name: str, agent_id: str | None = None) -> int:
     """Run a benchmark. `agent_id` is the CI-side task caller; the contract forces
-    this to `main`. Per-QA sub-agent routing goes through `target_agent`; the
-    separate CI scoring path may call reviewer directly."""
+    this to `main`. The main agent decides how to handle each QA (including
+    whether to delegate to sub-agents). The separate CI scoring path may call
+    reviewer directly."""
     qa_path = Path(os.environ.get("BENCH_QA_PATH", ROOT / "benchmarks" / bench_name / "qa.jsonl"))
     report_path = Path(os.environ.get("BENCH_REPORT_PATH",
                                        ROOT / "benchmarks" / bench_name / "bench-report.json"))
@@ -472,8 +436,7 @@ def main(bench_name: str, agent_id: str | None = None) -> int:
     agent_id = agent_id or os.environ.get("BENCH_AGENT") or "main"
     assert agent_id == "main", (
         f"CI policy violation: benchmarks may only target the `main` agent, "
-        f"got agent_id={agent_id!r}. Set `target_agent` on the QA to route "
-        f"through sessions_spawn instead."
+        f"got agent_id={agent_id!r}."
     )
 
     if not container:
@@ -490,7 +453,7 @@ def main(bench_name: str, agent_id: str | None = None) -> int:
         _debug_banner(bench_name)
         for qa in qas:
             qa_debug_dir = _debug_dir(bench_name, qa["qa_id"])
-            _debug_echo("qa_start", f"id={qa['qa_id']} target={qa.get('target_agent')} judge={qa.get('judge')}")
+            _debug_echo("qa_start", f"id={qa['qa_id']} judge={qa.get('judge')}")
             t0 = time.time()
             answer, session_key, raw = run_agent(container, agent_id, qa, run_id, model,
                                                   debug_dir=qa_debug_dir)
@@ -535,7 +498,6 @@ def main(bench_name: str, agent_id: str | None = None) -> int:
                   file=sys.stderr)
             result_entry = {
                 "qa_id": qa["qa_id"], "task_type": qa.get("task_type"),
-                "target_agent": qa.get("target_agent"),
                 "weight": qa.get("weight", 1.0),
                 "score": verdict.get("score", 0.0), "pass": verdict.get("pass", False),
                 "rationale": verdict.get("rationale", ""),

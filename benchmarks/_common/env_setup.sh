@@ -161,12 +161,13 @@ data = json.loads(p.read_text(encoding="utf-8"))
 #    per docs.openclaw.ai/providers/deepseek/ + gateway/configuration-reference:
 #    the API-protocol field is named "api" with values like
 #    openai-completions / openai-responses / anthropic-messages /
-#    google-generative-ai). We use anthropic-messages to talk to
-#    DeepSeek via its Anthropic-compatible endpoint.
+#    google-generative-ai). We use openai-completions to talk to
+#    DeepSeek via its OpenAI-compatible endpoint at
+#    https://api.deepseek.com/v1.
 providers = data.setdefault("models", {}).setdefault("providers", {})
 ds = providers.setdefault("deepseek", {
-    "baseUrl": "https://api.deepseek.com",
-    "api": "anthropic-messages",
+    "baseUrl": "https://api.deepseek.com/v1",
+    "api": "openai-completions",
     "apiKey": {"source": "env", "provider": "default", "id": "DEEPSEEK_API_KEY"},
     "models": [
         {
@@ -176,10 +177,10 @@ ds = providers.setdefault("deepseek", {
     ],
 })
 # Always overwrite apiKey + baseUrl + api with the current SecretRef and
-# anthropic-messages adapter, even if the provider was already declared
-# elsewhere (and even if a previous attempt used the wrong `apiType` field).
-ds["baseUrl"] = "https://api.deepseek.com"
-ds["api"] = "anthropic-messages"
+# openai-completions adapter, even if the provider was already declared
+# elsewhere (and even if a previous attempt used the wrong field name).
+ds["baseUrl"] = "https://api.deepseek.com/v1"
+ds["api"] = "openai-completions"
 ds.pop("apiType", None)  # the `apiType` key is not in the schema; remove if leftover
 ds["apiKey"] = {"source": "env", "provider": "default", "id": "DEEPSEEK_API_KEY"}
 ds.setdefault("models", [])

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://openclaw.local/benchmarks/qa_schema.json",
   "title": "OpenClaw Benchmark QA",
-  "description": "Unified QA schema for benchmarks/<name>/qa.jsonl. One QA per line. CI policy: every benchmark must call the `main` agent; sub-agent routing goes through `target_agent` (resolved at runtime by main via sessions_spawn).",
+  "description": "Unified QA schema for benchmarks/<name>/qa.jsonl. One QA per line. CI policy: every benchmark calls the `main` agent; main decides how to handle each task including sub-agent delegation.",
   "type": "object",
   "additionalProperties": true,
   "required": ["qa_id", "question"],
@@ -14,12 +14,7 @@
     "agent": {
       "type": "string",
       "const": "main",
-      "description": "CI policy: MUST be the string `main`. Sub-agents are reached indirectly via `target_agent` + main's `sessions_spawn`."
-    },
-    "target_agent": {
-      "type": "string",
-      "enum": ["autoresearch", "paper-review", "idea-generate", "reviewer"],
-      "description": "Optional. If present, main delegates the task to this sub-agent via sessions_spawn instead of solving it itself. Allowed values come from openclaw.json -> agents.list[]."
+      "description": "CI policy: MUST be the string `main`. All benchmark tasks go through the main agent."
     },
     "skill": {
       "type": "string",
@@ -38,7 +33,7 @@
     },
     "question": {
       "type": "string",
-      "description": "The actual prompt sent to the main agent (after the [BENCHMARK DIRECTIVE] wrapper is applied if `target_agent` is set)."
+      "description": "The actual prompt sent to the main agent."
     },
     "expected_artifacts": {
       "type": "array",

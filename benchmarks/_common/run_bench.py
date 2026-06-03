@@ -224,15 +224,33 @@ def run_agent(container: str, agent_id: str, qa: dict, run_id: str,
     ]
     if model:
         cmd += ["--model", model]
+    # Per-QA wall-clock cap. The QA may set `timeout_seconds` (per-call budget
+    # for the embedded openclaw agent) and `wall_clock_seconds` (overall cap
+    # for the docker exec cycle). The cap protects CI from a single hung
+    # test blocking the whole run: when the cap fires we set timed_out=True
+    # so downstream code can short-circuit judging and mark the QA failed.
+    timeout = int(qa.get("timeout_seconds", 1800))
+    wall_clock_cap = int(qa.get("wall_clock_seconds",
+                                int(os.environ.get("BENCH_MAX_QA_WALL_CLOCK", max(timeout + 120, 600)))))
     timed_out = False
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True,
-                              timeout=qa.get("timeout_seconds", 1800) + 60)
+                              timeout=wall_clock_cap)
         stdout = proc.stdout or ""
         stderr = proc.stderr or ""
         returncode = proc.returncode
     except subprocess.TimeoutExpired as e:
-        # Preserve whatever partial output we got, but mark the failure.
+        # The docker exec itself hung past the wall-clock cap. Kill the
+        # container-side process (best-effort) so the next QA can start on a
+        # healthy container, then preserve whatever partial output we got.
+        print(f"[{qa['qa_id']}] wall-clock cap hit after {wall_clock_cap}s; "
+              f"killing docker exec and marking QA timed_out",
+              file=sys.stderr)
+        try:
+            subprocess.run(["docker", "exec", container, "pkill", "-f",
+                            "openclaw agent"], capture_output=True, timeout=10)
+        except Exception:
+            pass
         stdout = e.stdout.decode("utf-8", "replace") if isinstance(e.stdout, (bytes, bytearray)) else (e.stdout or "")
         stderr = e.stderr.decode("utf-8", "replace") if isinstance(e.stderr, (bytes, bytearray)) else (e.stderr or "")
         returncode = -1
@@ -478,12 +496,25 @@ def main(bench_name: str, agent_id: str | None = None) -> int:
                                                   debug_dir=qa_debug_dir)
             elapsed = time.time() - t0
             mode = qa.get("judge", "rules")
-            # LLM judge directly invokes the dedicated reviewer agent. The
-            # main-agent-only policy above applies to each benchmark task, not
-            # to this separate CI scoring step.
-            verdict = (judge_with_agent(qa, answer, agent_id="reviewer", model=model,
-                                        container=container)
-                       if mode == "agent" else judge_with_rules(answer, qa))
+            if raw.get("timed_out"):
+                # Wall-clock cap fired. Skip scoring entirely and mark the QA
+                # failed so the benchmark continues with the remaining tests
+                # instead of stalling on a hung judge.
+                verdict = {
+                    "score": 0.0,
+                    "pass": False,
+                    "rationale": (
+                        f"timed out after {elapsed:.0f}s (wall-clock cap); "
+                        f"agent did not produce a reply within the budget"
+                    ),
+                }
+            else:
+                # LLM judge directly invokes the dedicated reviewer agent. The
+                # main-agent-only policy above applies to each benchmark task, not
+                # to this separate CI scoring step.
+                verdict = (judge_with_agent(qa, answer, agent_id="reviewer", model=model,
+                                            container=container)
+                           if mode == "agent" else judge_with_rules(answer, qa))
             # Dump judge artifacts when DEBUG is on.
             if qa_debug_dir is not None:
                 _debug_write(qa_debug_dir / "06_verdict.json", json.dumps(verdict, ensure_ascii=False, indent=2))

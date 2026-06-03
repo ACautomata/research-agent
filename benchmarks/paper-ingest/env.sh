@@ -11,6 +11,14 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 log() { printf '\n[paper-ingest.env] %s\n' "$*"; }
 
+# Bring up a fresh openclaw-bench container for this benchmark so fixtures
+# and runtime state from a previous benchmark cannot leak in.
+if [[ -f "${BENCH_ENV_FILE}" ]]; then
+  # shellcheck disable=SC1090
+  . "${BENCH_ENV_FILE}"
+  bench_force_recreate
+fi
+
 log "staging inbox paper"
 TARGET="${BENCH_MOUNT}/workspace-autoresearch/raw/inbox/bench-${BENCH_RUN_ID}"
 docker exec "${BENCH_CONTAINER}" mkdir -p "${TARGET}"

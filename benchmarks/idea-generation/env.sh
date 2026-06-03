@@ -14,6 +14,14 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 log() { printf '\n[idea-generation.env] %s\n' "$*"; }
 
+# Bring up a fresh openclaw-bench container for this benchmark so fixtures
+# and runtime state from a previous benchmark cannot leak in.
+if [[ -f "${BENCH_ENV_FILE}" ]]; then
+  # shellcheck disable=SC1090
+  . "${BENCH_ENV_FILE}"
+  bench_force_recreate
+fi
+
 TARGET="${BENCH_MOUNT}/workspace-idea-generate/bench-fixtures/bench-${BENCH_RUN_ID}/paper"
 log "staging paper fixture at ${TARGET}"
 docker exec "${BENCH_CONTAINER}" mkdir -p "${TARGET}"

@@ -115,6 +115,11 @@ def judge_with_agent(qa: dict, answer: str, agent_id: str = "reviewer",
 
     The reviewer prompt asks for a JSON verdict: {"score": 0-1, "rationale": "..."}.
     Falls back to rule scoring if the CLI is unavailable.
+
+    The judge call is bounded by `timeout` (default 600s) plus a 30s grace on
+    the subprocess side; a hung judge therefore cannot stall the whole
+    benchmark run. The fallback to rule scoring is tagged so the report
+    shows the difference between a real judge verdict and a degraded one.
     """
     agent_id = "reviewer"
     rubric = qa.get("rubric") or "Score how well the answer matches the gold answer on a 0-1 scale."
@@ -145,8 +150,15 @@ def judge_with_agent(qa: dict, answer: str, agent_id: str = "reviewer",
         cmd += ["--model", model]
     try:
         out = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 30)
-    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
-        # Fallback: degrade to rules so the report still has a score.
+    except subprocess.TimeoutExpired as e:
+        # Fallback: degrade to rules so the report still has a score, but
+        # surface the timeout so the PR comment can flag it. Without this
+        # tag a 10-minute judge hang would be indistinguishable from a
+        # normal rule-based pass.
+        fallback = judge_with_rules(answer, qa)
+        fallback["rationale"] = f"agent judge timed out after {timeout}s ({e}); " + fallback["rationale"]
+        return fallback
+    except FileNotFoundError as e:
         fallback = judge_with_rules(answer, qa)
         fallback["rationale"] = f"agent judge unavailable ({e}); " + fallback["rationale"]
         return fallback

@@ -212,7 +212,7 @@
       "memory-wiki": {
         "enabled": true,
         "config": {
-          "vaultMode": "bridge",
+          "vaultMode": "isolated",
           "vault": {
             "path": "~/.openclaw/wiki/main",
             "renderMode": "obsidian"
@@ -224,7 +224,7 @@
             "openAfterWrites": false
           },
           "bridge": {
-            "enabled": true,
+            "enabled": false,
             "readMemoryArtifacts": true,
             "indexDreamReports": true,
             "indexDailyNotes": true,
@@ -238,7 +238,7 @@
           },
           "search": {
             "backend": "shared",
-            "corpus": "all"
+            "corpus": "wiki"
           },
           "context": {
             "includeCompiledDigestPrompt": false

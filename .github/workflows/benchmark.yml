@@ -3,12 +3,23 @@ name: Benchmark
 on:
   # Run on every PR push (open / reopen / new commit / draft -> ready).
   # `synchronize` fires for every new commit pushed to the PR branch.
+  #
+  # DEBUG mode policy: BENCH_DEBUG=1 is set ONLY on pull_request runs. Direct
+  # pushes to main and the post-merge rerun use the normal (non-DEBUG) path.
+  # workflow_dispatch also defaults to normal mode; pass the `debug` input
+  # explicitly to force DEBUG on a manual main-branch run.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      debug:
+        description: "Enable BENCH_DEBUG=1 (raw artifacts per QA, PR-style verbose output)"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -28,6 +39,10 @@ jobs:
       BENCH_TARGETS: "idea-generate paper-review paper-review-pipeline paper-ingest idea-generation autoresearch"
       # Pin the upstream image. Override via repo variable OPENCLAW_IMAGE.
       OPENCLAW_IMAGE_DEFAULT: "acautomata/openclaw-docker-cn-im:latest"
+      # BENCH_DEBUG=1 only on PR runs. Direct pushes to main and the
+      # post-merge rerun are normal (no raw artifact dump). For a manual
+      # main-branch debug run, dispatch the workflow with debug=true.
+      BENCH_DEBUG: ${{ github.event_name == 'pull_request' && '1' || (github.event_name == 'workflow_dispatch' && inputs.debug && '1' || '') }}
 
     steps:
       - name: "Checkout"
@@ -174,6 +189,14 @@ jobs:
           path: |
             bench-results/
             benchmarks/*/bench-report.json
+          if-no-files-found: warn
+
+      - name: "Upload bench-debug artifacts (PR runs only)"
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-debug-${{ github.run_id }}
+          path: bench-debug/
           if-no-files-found: warn
 
       - name: "Tear down compose stack"

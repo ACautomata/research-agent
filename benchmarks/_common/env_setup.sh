@@ -119,7 +119,7 @@ tar --exclude='.git' --exclude='.github' --exclude='.env' \
     --exclude='devices' --exclude='identity' --exclude='feishu' \
     --exclude='extensions' --exclude='qqbot' --exclude='.openclaw' \
     --exclude='.dreams' --exclude='dreaming' --exclude='.bench-runtime' \
-    --exclude='bench-results' \
+    --exclude='bench-results' --exclude='bench-debug' \
     -C "${ROOT}" -cf - . | \
   docker exec -i "${CONTAINER}" tar -xf - -C /home/node/.openclaw
 # init.sh runs the openclaw gateway as the in-image node user (uid 1000).

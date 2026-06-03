@@ -14,11 +14,11 @@
 
 ### 2. 搜索 autoresearch 知识库
 
-位置：`/workspace/shared/autoresearch-wiki/`（非沙箱环境可用 `../workspace-autoresearch/wiki/`）
+位置：`/workspace/shared/memory-wiki/`（非沙箱环境可用 `~/.openclaw/wiki/main/`）
 
 查找方法（按推荐顺序）：
 
-- **读索引**：读 `/workspace/shared/autoresearch-wiki/index.md`，搜索论文标题关键词，根据链接定位到具体文件
+- **读索引**：读 `/workspace/shared/memory-wiki/index.md`，搜索论文标题关键词，根据链接定位到具体文件
 - **按标题搜文件**：在 `domains/` 下递归搜索 .md 文件，用方法名、缩写、第一作者等匹配文件名或文件内容
 - **按领域推断**：如已知论文所属领域（如 federated-learning），直接进入 `domains/{domain}/papers/` 查找
 

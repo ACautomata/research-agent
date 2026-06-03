@@ -156,12 +156,16 @@ p = pathlib.Path("/home/node/.openclaw/openclaw.json")
 data = json.loads(p.read_text(encoding="utf-8"))
 
 # 1. Inject / refresh the deepseek provider (OpenClaw expects this shape
-#    per docs.openclaw.ai/providers/deepseek/).
+#    per docs.openclaw.ai/providers/deepseek/ + gateway/configuration-reference:
+#    the API-protocol field is named "api" with values like
+#    openai-completions / openai-responses / anthropic-messages /
+#    google-generative-ai). We use anthropic-messages to talk to
+#    DeepSeek via its Anthropic-compatible endpoint.
 providers = data.setdefault("models", {}).setdefault("providers", {})
 ds = providers.setdefault("deepseek", {
     "baseUrl": "https://api.deepseek.com",
+    "api": "anthropic-messages",
     "apiKey": {"source": "env", "provider": "default", "id": "DEEPSEEK_API_KEY"},
-    "apiType": "openai-compatible",
     "models": [
         {
             "id": "deepseek-v4-flash",
@@ -169,11 +173,13 @@ ds = providers.setdefault("deepseek", {
         },
     ],
 })
-# Always overwrite apiKey with the current SecretRef, even if the provider
-# was already declared elsewhere.
+# Always overwrite apiKey + baseUrl + api with the current SecretRef and
+# anthropic-messages adapter, even if the provider was already declared
+# elsewhere (and even if a previous attempt used the wrong `apiType` field).
 ds["baseUrl"] = "https://api.deepseek.com"
+ds["api"] = "anthropic-messages"
+ds.pop("apiType", None)  # the `apiType` key is not in the schema; remove if leftover
 ds["apiKey"] = {"source": "env", "provider": "default", "id": "DEEPSEEK_API_KEY"}
-ds.setdefault("apiType", "openai-compatible")
 ds.setdefault("models", [])
 
 # 2. Repoint the default model at deepseek-v4-flash so every agent uses

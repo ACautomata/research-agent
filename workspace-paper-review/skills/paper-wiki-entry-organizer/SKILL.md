@@ -1,6 +1,6 @@
 ---
 name: paper-wiki-entry-organizer
-description: 将输入的科研论文整理为适合存入 Wiki / Obsidian 的结构化论文条目。适用于论文内容整理、文献库建设、自动化科研知识沉淀等场景。本 Skill 只做忠实整理，不进行深入问题挖掘、批判性分析或实验设计。
+description: 将论文内容整理为结构化 Wiki/Obsidian 条目，只做忠实整理，不做问题挖掘或批判分析。
 ---
 
 # 科研论文 Wiki 条目整理 Skill

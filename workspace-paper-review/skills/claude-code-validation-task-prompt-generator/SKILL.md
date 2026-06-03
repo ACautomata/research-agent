@@ -1,6 +1,6 @@
 ---
 name: claude-code-validation-task-prompt-generator
-description: 根据论文 Wiki、问题分析、验证实验设计和代码仓库信息，生成一份可直接发送给 claude-code 的任务提示词，用于指导 claude-code 在现有代码基础上实现验证性实验。
+description: 将验证实验设计翻译成可直接发给 claude-code 的最小侵入式实验任务提示词。
 ---
 
 # claude-code 验证实验任务提示词生成 Skill

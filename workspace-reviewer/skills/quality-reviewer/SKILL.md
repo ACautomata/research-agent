@@ -51,12 +51,6 @@ SCORE: 0.00-1.00
 ...
 ```
 
-## JSON judge 输出
+## 数字评分输出
 
-如果调用方明确要求“只输出 JSON verdict”，只输出：
-
-```json
-{"score": 0.0, "rationale": "short reason"}
-```
-
-不要包 Markdown，不要加解释。`score` 必须是 0 到 1。
+如果调用方明确要求纯数字评分，只输出两个字段：score（0 到 1 之间的数字）和 rationale（简短、诚实、可复核的理由）。不包 Markdown 格式，不加额外解释。

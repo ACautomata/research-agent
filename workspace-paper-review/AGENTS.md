@@ -29,6 +29,13 @@
 | "验证实验"、"实验设计"、"怎么验证"、"S4" | S4 | `paper-validation-experiment-designer` |
 | "claude-code提示词"、"任务提示词"、"claude-code"、"S5" | S5 | `claude-code-validation-task-prompt-generator` |
 
+## Main Agent 调用方式
+
+Main agent 通过 `sessions_spawn` 委托本 agent 时的 4 个常用场景模板（完整流程 /
+单阶段 / 断点续跑 / 仅质量审计）以及 9 项关键约定，已抽出到
+[`references/paper-review-scenarios.md`](references/paper-review-scenarios.md)。
+调用前请先读该文件，按目标场景复制对应模板并填入 `{}` 占位符。
+
 如果意图模糊无法判断，默认执行 S2→S5 全流程。
 
 > **注意**：Wiki 整理（原 S1）已由 `autoresearch` 子 agent 负责，不属于本 agent 的职责范围。收到"Wiki整理"类请求时，应告知 main agent 将其路由到 `autoresearch`。

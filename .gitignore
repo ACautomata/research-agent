@@ -63,6 +63,10 @@ extensions/
 # === Channel runtime data ===
 qqbot/
 
+# === Agent runtime state ===
+workspace-idea-generate/memory/
+workspace-idea-generate/state/
+
 # === Dreaming runtime data ===
 workspace/memory/.dreams/
 workspace/memory/dreaming/
@@ -82,6 +86,9 @@ bench-debug/
 .bench-runtime/
 .bench-runtime/.env.bench
 **/__pycache__/
+
+# === MCP runtime ===
+.playwright-mcp/
 
 # === Sensitive user data ===
 workspace/zhihu_cookies.json

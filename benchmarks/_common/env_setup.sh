@@ -6,8 +6,8 @@
 # and runs one smoke turn. Every benchmark's env.sh runs after this.
 #
 # Required env (set by CI workflow or by the user for local runs):
-#   MINIMAX_API_KEY         -- LLM provider key (fail-fast if missing)
-#   MINIMAX_BASE_URL        -- optional, defaults to https://api.minimaxi.com
+#   DEEPSEEK_API_KEY         -- LLM provider key (fail-fast if missing)
+#   DEEPSEEK_BASE_URL        -- optional, defaults to https://api.deepseek.com
 #   BENCH_RUN_ID            -- used as the session key prefix and as the compose project name
 #   BENCH_COMPOSE_FILE      -- optional, defaults to docker/docker-compose.bench.yml
 #   BENCH_OPENCLAW_IMAGE    -- optional, overrides the image tag
@@ -28,10 +28,10 @@ log() { printf '\n[env_setup] %s\n' "$*"; }
 die() { printf '\n[env_setup][FATAL] %s\n' "$*" >&2; exit 1; }
 
 # 0. Secrets check
-if [[ -z "${MINIMAX_API_KEY:-}" ]]; then
-  die "MINIMAX_API_KEY is not set. Add it as a GitHub Actions secret, then re-run."
+if [[ -z "${DEEPSEEK_API_KEY:-}" ]]; then
+  die "DEEPSEEK_API_KEY is not set. Add it as a GitHub Actions secret, then re-run."
 fi
-: "${MINIMAX_BASE_URL:=https://api.minimaxi.com}"
+: "${DEEPSEEK_BASE_URL:=https://api.deepseek.com}"
 
 # 1. Build a temporary .env the compose file can read.
 ENV_DIR="${ROOT}/.bench-runtime"
@@ -50,9 +50,9 @@ TZ=Asia/Shanghai
 SYNC_OPENCLAW_CONFIG=false
 SYNC_EXTENSIONS_ON_START=false
 SYNC_MODEL_CONFIG=false
-MODEL_ID=minimax/MiniMax-M2.7
-PRIMARY_MODEL=minimax/MiniMax-M2.7
-BASE_URL=${MINIMAX_BASE_URL}
+MODEL_ID=deepseek/deepseek-v4-flash
+PRIMARY_MODEL=deepseek/deepseek-v4-flash
+BASE_URL=${DEEPSEEK_BASE_URL}
 API_PROTOCOL=anthropic
 CONTEXT_WINDOW=200000
 MAX_TOKENS=8192
@@ -140,31 +140,62 @@ log "chown /home/node/.openclaw -> 1000:1000 (openclaw runtime uid)"
 docker exec "${CONTAINER}" chown -R 1000:1000 /home/node/.openclaw || true
 log "repo copied into container"
 
-# 5b. Patch models.providers.minimax.apiKey with a SecretRef so `openclaw
-#     agent --local` can resolve it from the MINIMAX_API_KEY env var.
-#     All agent calls use `docker exec -e MINIMAX_API_KEY ... openclaw agent
+# 5b. Inject/refresh the `deepseek` provider in openclaw.json with a SecretRef
+#     so `openclaw agent --local` can resolve it from the DEEPSEEK_API_KEY env
+#     var, and repoint `agents.defaults.model.primary` at deepseek-v4-flash.
+#     All agent calls use `docker exec -e DEEPSEEK_API_KEY ... openclaw agent
 #     --local`, so the SecretRef resolves inside each exec session.  The
 #     gateway process itself does NOT need the env var.  We deliberately do
 #     NOT restart the container after patching -- restarting was the root
 #     cause of 13+ CI failures because init.sh re-runs on restart and the
 #     container exits within seconds.
-log "patching models.providers.minimax.apiKey with SecretRef + sandbox off (no restart)"
+log "patching deepseek provider + default model + sandbox off (no restart)"
 docker exec "${CONTAINER}" python3 -c '
 import json, pathlib
 p = pathlib.Path("/home/node/.openclaw/openclaw.json")
 data = json.loads(p.read_text(encoding="utf-8"))
-prov = data.setdefault("models", {}).setdefault("providers", {}).setdefault("minimax", {})
-prov["apiKey"] = {"source": "env", "provider": "default", "id": "MINIMAX_API_KEY"}
-# Disable sandboxing: the CI container has no Docker daemon (it *is* the
-# Docker host for its own children), so sandbox.mode=all makes the agent
-# fail with "Sandbox mode requires Docker, but the Docker daemon is not
-# available" before it can call the LLM.
-sandbox = data.setdefault("agents", {}).setdefault("defaults", {}).setdefault("sandbox", {})
+
+# 1. Inject / refresh the deepseek provider (OpenClaw expects this shape
+#    per docs.openclaw.ai/providers/deepseek/).
+providers = data.setdefault("models", {}).setdefault("providers", {})
+ds = providers.setdefault("deepseek", {
+    "baseUrl": "https://api.deepseek.com",
+    "apiKey": {"source": "env", "provider": "default", "id": "DEEPSEEK_API_KEY"},
+    "apiType": "openai-compatible",
+    "models": [
+        {
+            "id": "deepseek-v4-flash",
+            "name": "DeepSeek V4 Flash",
+        },
+    ],
+})
+# Always overwrite apiKey with the current SecretRef, even if the provider
+# was already declared elsewhere.
+ds["baseUrl"] = "https://api.deepseek.com"
+ds["apiKey"] = {"source": "env", "provider": "default", "id": "DEEPSEEK_API_KEY"}
+ds.setdefault("apiType", "openai-compatible")
+ds.setdefault("models", [])
+
+# 2. Repoint the default model at deepseek-v4-flash so every agent uses
+#    DeepSeek unless overridden by an agent-specific `model` field.
+defaults = data.setdefault("agents", {}).setdefault("defaults", {})
+model = defaults.setdefault("model", {})
+model["primary"] = "deepseek/deepseek-v4-flash"
+fallbacks = model.get("fallbacks") or []
+model["fallbacks"] = [f for f in fallbacks if not str(f).startswith("minimax/")]
+
+# 3. Disable sandboxing: the CI container has no Docker daemon (it *is* the
+#    Docker host for its own children), so sandbox.mode=all makes the agent
+#    fail with "Sandbox mode requires Docker, but the Docker daemon is not
+#    available" before it can call the LLM.
+sandbox = defaults.setdefault("sandbox", {})
 if sandbox.get("mode") and sandbox["mode"] != "off":
     sandbox["mode"] = "off"
     print("patched agents.defaults.sandbox.mode -> off (no Docker daemon in CI)")
+
 p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-print("patched models.providers.minimax.apiKey -> SecretRef(MINIMAX_API_KEY)")
+print("patched models.providers.deepseek.apiKey -> SecretRef(DEEPSEEK_API_KEY)")
+print("patched agents.defaults.model.primary -> deepseek/deepseek-v4-flash")
 '
 docker exec "${CONTAINER}" chown 1000:1000 /home/node/.openclaw/openclaw.json
 

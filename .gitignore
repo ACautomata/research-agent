@@ -92,3 +92,9 @@ bench-debug/
 
 # === Sensitive user data ===
 workspace/zhihu_cookies.json
+
+# === Large skill assets ===
+.claude/skills/nuwa-skill/cover-distill-minds.png
+.claude/skills/nuwa-skill/6-agents-parallel.png
+.claude/skills/nuwa-skill/advisory-board.png
+.claude/skills/nuwa-skill/assets/hero.gif

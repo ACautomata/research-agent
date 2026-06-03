@@ -1,6 +1,6 @@
 ---
 name: idea-generate
-description: Generate structured research ideas from papers, OpenClaw workspace context, experiment results, user preferences, and follow-up feedback. Use when the agent needs to summarize related evidence, extract limitations or future-work signals, propose improvement ideas, refine ideas after human review, and write recommended Idea Cards to a Markdown file. Do not use for full PRD writing or experiment execution.
+description: 从论文、wiki、实验结果和用户约束中生成有证据支撑、可比较、可验证的研究 idea card。
 ---
 
 # Idea Generate

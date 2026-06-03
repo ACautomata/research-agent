@@ -1,6 +1,6 @@
 ---
 name: paper-review-style-problem-analyzer
-description: 基于论文基础 Wiki 与实验结果深化提取文档，从论文贡献 claim、方法机制、实验现象和审稿式质疑出发，分析现有方法中的潜在问题、证据充分性与研究空缺，生成适合后续验证性实验设计和研究方向提炼使用的 Markdown 文档。
+description: 基于 Wiki 和实验提取文档，从审稿视角分析论文 claim-机制-证据链，发现潜在问题、证据不足和研究空缺。
 ---
 
 # 科研论文审稿式问题分析 Skill

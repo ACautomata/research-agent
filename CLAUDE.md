@@ -21,6 +21,7 @@ This repo follows OpenClaw's hub-and-spoke multi-agent pattern. The main agent (
 - **workspace-idea-generate/** — Sub-agent workspace for the Idea Generate agent. Contains the `idea-generate` skill for paper-grounded research idea cards, opportunity synthesis, deduplication, validation, and Markdown export.
 - **workspace-reviewer/** — Sub-agent workspace for the Reviewer agent. Reviews sub-agent outputs and benchmark candidate answers with a strict pass/fail quality gate.
 - **benchmarks/** — Developer benchmarks and evaluation datasets for testing agent capabilities.
+- **docs/** — Local snapshots of OpenClaw design references (Lobster, Task Flow, Hooks, Standing Orders, Commitments, Automation overview). **Read these before designing any new feature** — start with `docs/README.md` for the "designing X? read Y" index. The canonical source is <https://docs.openclaw.ai/>; refresh the local files when upstream changes.
 
 ## Key Configuration Details
 

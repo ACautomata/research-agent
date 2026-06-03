@@ -15,6 +15,14 @@ QA_SRC="${HERE}/qa.jsonl"
 
 log() { printf '\n[idea-generate.env] %s\n' "$*"; }
 
+# Bring up a fresh openclaw-bench container for this benchmark so fixtures
+# and runtime state from a previous benchmark cannot leak in.
+if [[ -f "${BENCH_ENV_FILE}" ]]; then
+  # shellcheck disable=SC1090
+  . "${BENCH_ENV_FILE}"
+  bench_force_recreate
+fi
+
 log "staging qa.jsonl -> ${BENCH_MOUNT}/workspace-idea-generate/benchmark-${BENCH_RUN_ID}.jsonl"
 docker exec "${BENCH_CONTAINER}" mkdir -p \
   "${BENCH_MOUNT}/workspace-idea-generate/bench-fixtures"

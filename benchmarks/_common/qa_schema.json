@@ -70,7 +70,12 @@
       "type": "integer",
       "default": 1800,
       "minimum": 60,
-      "maximum": 7200
+      "maximum": 7200,
+      "description": "Per-QA wall-clock budget passed to the embedded openclaw agent as `--timeout`. A separate, larger wall-clock cap protects the harness itself (see wall_clock_seconds)."
+    },
+    "wall_clock_seconds": {
+      "type": "integer",
+      "description": "Hard wall-clock cap for the docker exec + judge cycle. When this fires the QA is recorded as `timed_out: true` with score 0 and the benchmark continues with the next QA instead of stalling. Defaults to `max(timeout_seconds + 120, 600)`, or `BENCH_MAX_QA_WALL_CLOCK` if set in the env."
     },
     "weight": {
       "type": "number",

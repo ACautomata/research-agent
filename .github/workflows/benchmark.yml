@@ -181,13 +181,16 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: bench-runtime-env
-          # Upload the whole .bench-runtime/ directory so the bench jobs
-          # receive .env.bench + bench-runtime-env.sh (and any other
-          # helpers env_setup.sh wrote). The directory itself is
-          # hidden (dot-prefixed) and contains a hidden .env.bench, so
-          # we must opt into include-hidden-files — otherwise the
-          # upload silently produces "No files were found".
-          path: .bench-runtime/
+          # Bench jobs only need two files: the docker compose env-file
+          # and the bench-runtime-env.sh produced by env_setup.sh. We
+          # intentionally do NOT upload the whole .bench-runtime/
+          # directory because it contains openclaw-data/, a docker
+          # volume mount that has root-owned files upload-artifact
+          # cannot scandir (EACCES). Both files are dot-prefixed so we
+          # opt into include-hidden-files.
+          path: |
+            .bench-runtime/.env.bench
+            .bench-runtime/bench-runtime-env.sh
           include-hidden-files: true
           if-no-files-found: error
 

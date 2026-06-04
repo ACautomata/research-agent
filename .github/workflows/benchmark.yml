@@ -175,19 +175,19 @@ jobs:
               --env-file .bench-runtime/.env.bench \
               down -v --remove-orphans || true
           fi
-          # Keep .bench-runtime/.env.bench and bench-runtime-env.sh for the
-          # next step to upload.
-          cp .bench-runtime/.env.bench .env.bench.upload || true
-          cp .bench-runtime/bench-runtime-env.sh bench-runtime-env.sh.upload || true
 
       - name: "Upload runtime env artifact"
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: bench-runtime-env
-          path: |
-            .bench-runtime/.env.bench
-            bench-runtime-env.sh.upload
+          # Upload the whole .bench-runtime/ directory so the bench jobs
+          # receive .env.bench + bench-runtime-env.sh (and any other
+          # helpers env_setup.sh wrote). Avoid listing individual files
+          # because actions/upload-artifact@v4's path resolution uses
+          # the least common ancestor, which can dedup across paths
+          # declared on different roots.
+          path: .bench-runtime/
           if-no-files-found: error
 
   # One job per benchmark. They all share the same setup job, so the

@@ -1,0 +1,78 @@
+# CI/CD benchmark compose profile.
+# Mirrors the upstream openclaw-docker-cn-im structure but with ALL channels,
+# plugins, and sandbox mode disabled, and bind restricted to loopback.
+# Only the LLM provider is wired in.
+services:
+  openclaw-bench:
+    container_name: openclaw-bench
+    image: ${OPENCLAW_IMAGE}
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+    user: ${OPENCLAW_RUN_USER:-0:0}
+    environment:
+      TZ: Asia/Shanghai
+      HOME: /home/node
+      TERM: xterm-256color
+      NODE_ENV: production
+      LANG: en_US.UTF-8
+      LANGUAGE: en_US:en
+      LC_ALL: en_US.UTF-8
+      # Sync flags. Keep model config sync disabled so init.sh never writes
+      # plaintext credentials from API_KEY to disk. env_setup.sh patches a
+      # SecretRef into openclaw.json instead; benchmark calls pass
+      # MINIMAX_API_KEY only to each `docker exec ... openclaw agent --local`
+      # process.
+      SYNC_OPENCLAW_CONFIG: "true"
+      SYNC_EXTENSIONS_ON_START: "false"
+      SYNC_EXTENSIONS_MODE: "none"
+      SYNC_MODEL_CONFIG: "false"
+      # Model
+      MODEL_ID: ${MODEL_ID}
+      PRIMARY_MODEL: ${PRIMARY_MODEL}
+      BASE_URL: ${BASE_URL}
+      # Keep API_KEY empty so init.sh does not write plaintext credentials to disk.
+      # The runtime SecretRef uses MINIMAX_API_KEY from the container env instead.
+      API_KEY: ""
+      MINIMAX_API_KEY: ${MINIMAX_API_KEY}
+      MINIMAX_BASE_URL: ${MINIMAX_BASE_URL}
+      API_PROTOCOL: ${API_PROTOCOL}
+      CONTEXT_WINDOW: ${CONTEXT_WINDOW}
+      MAX_TOKENS: ${MAX_TOKENS}
+      # Channels: explicitly disabled so the gateway never tries to dial out.
+      DM_POLICY: disabled
+      GROUP_POLICY: disabled
+      ALLOW_FROM: ""
+      # Workspace
+      OPENCLAW_WORKSPACE_ROOT: ${OPENCLAW_WORKSPACE_ROOT}
+      # Gateway binding (must be set explicitly in the container env; init.sh
+      # reads these, not just the host port mapping). NOTE: openclaw accepts
+      # only the literals loopback/lan/tailnet/auto/custom -- not raw IPs.
+      OPENCLAW_GATEWAY_PORT: ${OPENCLAW_GATEWAY_PORT:-18789}
+      OPENCLAW_GATEWAY_BIND: loopback
+      OPENCLAW_GATEWAY_MODE: local
+      OPENCLAW_GATEWAY_ALLOW_INSECURE_AUTH: "true"
+      # GATEWAY_TOKEN is required at startup even with insecure-auth on. We
+      # never use this token (the CLI runs --local embedded), so a stable
+      # dummy value is enough.
+      GATEWAY_TOKEN: ${GATEWAY_TOKEN:-bench-only-not-a-real-token}
+      # Sandbox off in CI
+      OPENCLAW_SANDBOX_MODE: off
+      OPENCLAW_PLUGINS_ENABLED: "false"
+    volumes:
+      - ${OPENCLAW_DATA_DIR}:/home/node/.openclaw
+    ports:
+      - "${DOCKER_BIND:-127.0.0.1}:${OPENCLAW_GATEWAY_PORT:-18789}:${OPENCLAW_GATEWAY_PORT:-18789}"
+    init: true
+    restart: "no"
+    healthcheck:
+      # The openclaw CLI is always in PATH; what we actually need to know
+      # is whether the gateway finished starting. `openclaw gateway status`
+      # returns non-zero if startup failed.
+      test: ["CMD-SHELL", "openclaw gateway status >/dev/null 2>&1 || (command -v openclaw >/dev/null && [ -f /home/node/.openclaw/logs/stability/openclaw-stability-*-gateway.startup_failed.json ] && exit 1 || exit 0)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s

@@ -47,6 +47,7 @@ openclaw.json.last-good
 workspace/.openclaw/
 workspace-paper-review/.openclaw/
 workspace-idea-generate/.openclaw/
+workspace-reviewer/.openclaw/
 workspace-idea-generate/idea-runs/
 workspace-idea-generate/paper/
 
@@ -62,6 +63,10 @@ extensions/
 # === Channel runtime data ===
 qqbot/
 
+# === Agent runtime state ===
+workspace-idea-generate/memory/
+workspace-idea-generate/state/
+
 # === Dreaming runtime data ===
 workspace/memory/.dreams/
 workspace/memory/dreaming/
@@ -69,11 +74,29 @@ workspace-paper-review/memory/.dreams/
 workspace-paper-review/memory/dreaming/
 workspace-idea-generate/memory/.dreams/
 workspace-idea-generate/memory/dreaming/
+workspace-reviewer/memory/.dreams/
+workspace-reviewer/memory/dreaming/
 
 # === Benchmark runtime artifacts ===
 benchmarks/**/results/
 benchmarks/**/output/
+benchmarks/**/bench-report.json
+benchmarks/**/.wiki-import-failed
+benchmarks/**/.wiki-import-stderr.log
+bench-results/
+bench-debug/
+.bench-runtime/
+.bench-runtime/.env.bench
 **/__pycache__/
+
+# === MCP runtime ===
+.playwright-mcp/
 
 # === Sensitive user data ===
 workspace/zhihu_cookies.json
+
+# === Large skill assets ===
+.claude/skills/nuwa-skill/cover-distill-minds.png
+.claude/skills/nuwa-skill/6-agents-parallel.png
+.claude/skills/nuwa-skill/advisory-board.png
+.claude/skills/nuwa-skill/assets/hero.gif

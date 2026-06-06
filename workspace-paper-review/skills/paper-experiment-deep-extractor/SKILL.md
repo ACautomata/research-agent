@@ -1,6 +1,6 @@
 ---
 name: paper-experiment-deep-extractor
-description: 对科研论文实验部分进行深化提取，整理实验设置、实验结果、实验现象与结论证据关系，生成适合后续问题发现与验证使用的 Markdown 文档。
+description: 对论文实验部分深化提取，输出结构化 Markdown 文档，供下游问题分析和验证设计使用。
 ---
 
 # 科研论文实验结果深化提取 Skill

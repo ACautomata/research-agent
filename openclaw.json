@@ -59,14 +59,24 @@
         "mode": "safeguard"
       },
       "sandbox": {
-        "mode": "off",
-        "workspaceAccess": "none"
+        "mode": "all",
+        "scope": "agent",
+        "workspaceAccess": "rw",
+        "docker": {
+          "binds": [
+            "/home/node/.openclaw/wiki/main:/workspace/shared/memory-wiki:ro",
+            "/home/node/.openclaw/workspace-paper-review/outputs:/workspace/shared/paper-review-outputs:ro",
+            "/home/node/.openclaw/workspace-idea-generate/idea-runs:/workspace/shared/idea-runs:ro"
+          ]
+        }
       },
       "elevatedDefault": "full",
       "maxConcurrent": 4,
       "subagents": {
+        "delegationMode": "prefer",
         "maxConcurrent": 8,
-        "allowAgents": ["autoresearch", "paper-review", "idea-generate"]
+        "maxSpawnDepth": 1,
+        "allowAgents": ["autoresearch", "paper-review", "idea-generate", "reviewer"]
       }
     },
     "list": [
@@ -90,6 +100,11 @@
         "id": "idea-generate",
         "name": "Idea Generate",
         "workspace": "~/.openclaw/workspace-idea-generate"
+      },
+      {
+        "id": "reviewer",
+        "name": "Reviewer",
+        "workspace": "~/.openclaw/workspace-reviewer"
       }
     ]
   },
@@ -197,7 +212,7 @@
       "memory-wiki": {
         "enabled": true,
         "config": {
-          "vaultMode": "bridge",
+          "vaultMode": "isolated",
           "vault": {
             "path": "~/.openclaw/wiki/main",
             "renderMode": "obsidian"
@@ -209,7 +224,7 @@
             "openAfterWrites": false
           },
           "bridge": {
-            "enabled": true,
+            "enabled": false,
             "readMemoryArtifacts": true,
             "indexDreamReports": true,
             "indexDailyNotes": true,
@@ -223,7 +238,7 @@
           },
           "search": {
             "backend": "shared",
-            "corpus": "all"
+            "corpus": "wiki"
           },
           "context": {
             "includeCompiledDigestPrompt": false

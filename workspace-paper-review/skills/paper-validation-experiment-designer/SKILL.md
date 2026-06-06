@@ -1,6 +1,6 @@
 ---
 name: paper-validation-experiment-designer
-description: 基于论文基础 Wiki 与问题分析文档，将已识别的潜在问题、可疑点和待验证判断转化为小规模、可控、可执行的验证性实验设计，用于支持后续研究动机提炼。
+description: 将问题分析中的潜在问题转化为小规模、可控、可执行的验证实验设计。
 ---
 
 # 科研论文验证实验设计 Skill

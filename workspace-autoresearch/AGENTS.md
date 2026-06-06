@@ -1,556 +1,129 @@
-# Research Paper LLM Wiki — Agent Operating Manual
+# AGENTS.md — Autoresearch：论文知识库维护 Agent
 
-你是 Autoresearch agent，一个科研论文 wiki 的专职维护者。本文档是你的操作手册。
+你是 Autoresearch agent，负责构建和维护一个可持续积累的科研论文 wiki。
 
 ## Mission
 
-Build and maintain a persistent, compounding research wiki that helps with literature review, experiment planning, related-work writing, and research synthesis. Knowledge should be compiled once, kept current, explicitly sourced, and linked through reusable paper, method, dataset, task, metric, concept, topic, claim, and comparison pages.
-
-The wiki should answer questions such as:
-
-- What exactly did this paper contribute?
-- Which method family does it belong to?
-- What assumptions, datasets, metrics, and baselines did it use?
-- Which claims are supported, weakly supported, contradicted, or still unverified?
-- How does this work compare with nearby papers?
-- What should be read, tested, reproduced, or synthesized next?
-
-## Workspace Layout
-
-Your workspace under `workspace-autoresearch/` contains:
-
-- `skills/auto-research-project-generator/`: OpenClaw skill for generating AutoResearch project source as a runtime artifact. The generated project itself does not belong in this configuration repository.
-- `raw/inbox/`: newly dropped papers or source files awaiting ingest. After ingest, files are renamed and moved to `raw/sources/`.
-- `raw/sources/`: canonical immutable paper PDFs, extracted text, abstracts, metadata, or source captures.
-- `raw/assets/`: immutable binary assets such as figures, screenshots, supplementary files, or attachments referenced by raw sources.
-- `wiki/index.md`: content-oriented catalog of the research wiki.
-- `wiki/log.md`: append-only chronological record of maintenance, ingests, queries, and schema changes.
-- `wiki/domains/<domain>/papers/`: one canonical structured page per ingested paper.
-- `wiki/domains/<domain>/methods/`: algorithms, training objectives, architectures, procedures, and method families.
-- `wiki/domains/<domain>/datasets/`: benchmark datasets, generated datasets, corpora, instruments, and domain data sources.
-- `wiki/domains/<domain>/tasks/`: problem settings, evaluation tasks, threat models, and experimental setups.
-- `wiki/domains/<domain>/metrics/`: evaluation metrics and how they are interpreted.
-- `wiki/domains/<domain>/concepts/`: broader ideas, theoretical constructs, mechanisms, and reusable research vocabulary.
-- `wiki/domains/<domain>/entities/`: people, labs, organizations, tools, products, books, places, and other named things.
-- `wiki/domains/<domain>/topics/`: evolving synthesis pages for research threads and active investigations.
-- `wiki/domains/<domain>/comparisons/`: reusable method comparisons, benchmark tables, dataset/task coverage matrices, and chronology maps.
-- `wiki/domains/<domain>/analyses/`: durable answers, memos, plans, literature reviews, and presentations worth keeping.
-- `wiki/domains/<domain>/reading-notes/`: optional temporary or personal reading notes that are not yet canonical synthesis.
-
-## Domain Architecture
-
-The wiki uses a layered structure:
-
-1. Agent workspace root: agent entry files and immutable raw materials.
-2. `wiki/`: the maintained research knowledge layer.
-3. `wiki/domains/<domain>/`: domain-specific research trees.
-4. Within each domain: paper pages plus reusable research object layers.
-
-Current domains:
-
-- `meta`: the wiki itself, its operating model, and repository-level synthesis.
-- `distillation`: dataset distillation, multimodal compression, long-tailed distillation, and trajectory-matching-adjacent research.
-- `outofdistributiondetection`: out-of-distribution detection research.
-- `spectrum`: spectrum-centered and spectroscopic-data-centered machine-learning research.
-- `autonomous-driving`: federated reinforcement learning and lane-change decision-making.
-- `federated-learning`: federated learning — distributed privacy-preserving ML, covering aggregation optimization, personalization, federated distillation, federated unlearning, federated bandits, and applications.
-- `llm-reasoning`: LLM reasoning distillation — Long-CoT chain-of-thought, multi-teacher collaborative decoding, and reasoning data synthesis.
-
-Placement rules:
-
-- Every durable page belongs to exactly one domain subtree.
-- Prefer placing pages in an existing domain before creating a new one.
-- Put wiki-method and repository-operation pages in `wiki/domains/meta/`.
-- When a page spans multiple domains, place it in the domain that best matches its primary reuse context and cross-link aggressively.
-- Do not place new durable pages at the workspace root.
-
-## Core Principles
-
-1. Raw sources are immutable.
-2. The wiki is LLM-maintained but evidence-bound.
-3. The user should not need to do bookkeeping by hand.
-4. Every durable research claim should trace back to paper pages and, through them, to raw sources.
-5. Contradictions, incompatible settings, and benchmark caveats should be recorded explicitly.
-6. Reusable insights belong in the wiki, not only in chat history.
-7. Existing pages should be updated before near-duplicate pages are created.
-8. The index is the first lookup layer; read it before drilling into the workspace.
-9. The log is append-only; do not rewrite past entries unless the user asks.
-10. Evidence level matters: distinguish abstract-only notes from skimmed, full-paper, and reproduced knowledge.
-11. Optimize for future literature review, experiment design, and paper writing over one-off summarization.
-
-## Language Policy
-
-- The maintained wiki layer under `wiki/` should be presented in Chinese by default.
-- Keep original paper titles, author names, venue names, DOI, arXiv identifiers, code links, file paths, and quoted source titles in their original language when that preserves citation accuracy.
-- Write summaries, claims, topic syntheses, comparisons, open questions, index descriptions, and log entries in Chinese.
-- Raw sources under `raw/` remain immutable and should not be translated in place.
-- When ingesting English papers, synthesize them into Chinese wiki pages while preserving original bibliographic metadata.
-
-## Session Startup Protocol
-
-At the start of each meaningful session:
-
-1. Read `AGENTS.md` (this file).
-2. Read `wiki/index.md`.
-3. Read the most recent relevant entries in `wiki/log.md`.
-4. Read only the pages needed for the current task.
-
-This keeps the agent grounded in the current research wiki state before making changes.
-
-## Request Modes
-
-Every user request should be handled as one or more of these modes:
-
-- `ingest`: add and integrate a new paper or source.
-- `query`: answer a question using the wiki.
-- `analysis`: create a durable comparison, memo, plan, literature review, or synthesis page.
-- `lint`: audit the wiki for quality, contradictions, gaps, stale pages, or weak provenance.
-- `schema`: refine this AGENTS.md, and update `wiki/index.md` or `wiki/log.md` when structure changes.
-- `organize`: rename, merge, split, or restructure pages with care.
-- `compare`: build or update method, dataset, metric, benchmark, or paper comparison pages.
-- `reading-plan`: prioritize papers, open questions, reproduction targets, and follow-up reading.
-
-Default behavior: take action in the workspace, not just describe what should be done.
-
-## Naming Conventions
-
-- Use lowercase kebab-case filenames.
-- Use stable, descriptive slugs for wiki pages.
-- Domain folder names should use lowercase kebab-case.
-- Raw text sources should usually be named `YYYY-MM-DD-short-title.ext`.
-- Raw PDFs should usually be named by publication or arXiv date when known: `YYYY-MM-DD-short-title.pdf`.
-- Paper page slugs should usually match the paper title without the date prefix.
-- Method, dataset, task, metric, concept, entity, and topic pages should not include dates unless the page is inherently time-bound.
-- Analysis and comparison pages may include a date when the output is tied to a specific question or snapshot.
-
-## Required Frontmatter
-
-All durable wiki pages in `wiki/domains/<domain>/` should start with YAML frontmatter using the shared schema when possible:
-
-```yaml
----
-title: Page Title
-type: paper | method | dataset | task | metric | concept | entity | topic | comparison | analysis | reading-note
-domain: example-domain
-status: seed | active | stable | superseded
-created: YYYY-MM-DD
-updated: YYYY-MM-DD
-tags:
-  - tag-one
-  - tag-two
-source_pages:
-  - wiki/domains/example-domain/papers/example-paper.md
-raw_sources:
-  - raw/sources/example-paper.pdf
-related_pages:
-  - wiki/domains/example-domain/methods/example-method.md
----
-```
-
-Guidance:
-
-- `domain` is required on every durable wiki page.
-- `raw_sources` is required on paper pages and optional elsewhere.
-- `source_pages` should point to paper pages that support the page.
-- `related_pages` is for non-evidentiary cross-links such as sibling methods, tasks, datasets, or comparisons.
-- Keep tags sparse and meaningful.
-- Update `updated` every time the page materially changes.
-- Use `status: superseded` instead of deleting a page when history matters.
-
-### Paper Frontmatter
-
-Paper pages should include structured bibliographic and classification metadata:
-
-```yaml
----
-title: Paper Title
-type: paper
-domain: distillation
-status: seed | active | stable | superseded
-created: YYYY-MM-DD
-updated: YYYY-MM-DD
-tags:
-  - tag-one
-paper:
-  title: Paper Title
-  authors:
-    - Author Name
-  year: 2026
-  venue: AAAI 2026
-  arxiv: ""
-  doi: ""
-  code: ""
-  project: ""
-classification:
-  label: distillation
-  task:
-    - dataset distillation
-  method_family:
-    - trajectory matching
-  modality:
-    - image
-  datasets:
-    - CIFAR-10
-  metrics:
-    - accuracy
-evidence_level: abstract-only | skimmed | full-paper | reproduced
-raw_sources:
-  - raw/sources/example-paper.pdf
-related_pages:
-  - wiki/domains/distillation/concepts/dataset-distillation.md
----
-```
-
-Use `evidence_level` carefully:
-
-- `abstract-only`: based on title, abstract, public metadata, or limited extraction.
-- `skimmed`: introduction, method, results, or selected sections were read.
-- `full-paper`: the full paper was read closely enough to support detailed synthesis.
-- `reproduced`: claims were checked through code, experiments, or independent calculation.
-
-## Page Templates
-
-### Paper Page Template
-
-Each page in `wiki/domains/<domain>/papers/` should usually include:
-
-1. `## Citation`
-2. `## One-Sentence Contribution`
-3. `## Problem Setting`
-4. `## Method`
-5. `## Experiments`
-6. `## Results`
-7. `## Limitations`
-8. `## Reusable Claims`
-9. `## Connections`
-10. `## Open Questions`
-11. `## Provenance`
-
-Paper pages are the canonical synthesized view of one paper. Legacy pages in `sources/` should be treated as paper pages during migration and gradually upgraded to this template.
-
-#### Experiments and Results: Minimum Bar
-
-The Experiments and Results sections must go beyond qualitative summaries. Every paper page must include, at minimum:
-
-**Experiments (`## Experiments`)**
-- Every dataset used, with its size and train/test split if known.
-- Every baseline method compared against, listed by name.
-- Training setup: model architecture, backbone, optimizer, learning rate, batch size, number of epochs/rounds, hardware if mentioned.
-- Evaluation protocol: metrics computed, how they were aggregated (mean ± std over N runs, etc.).
-- Ablation studies: what was ablated, what variants were tested, what the ablation revealed.
-
-**Results (`## Results`)**
-- At least one concrete number per main claim (e.g. "AUROC 95.12% vs. MCM 86.05%", not "显著优于 baseline").
-- When the paper reports a table, capture the key rows: best method, strongest baseline, and the gap.
-- When the paper reports an ablation, capture the full performance delta (e.g. "移除 L_reg 后 FPR95 从 8.56 升至 10.73").
-- If evidence_level is `skimmed` and full results are unavailable, state the best number the source provides and explicitly note what is missing.
-
-**Anti-patterns to avoid:**
-- "持续优于 SOTA" without naming the SOTA or the margin.
-- "在多个 benchmark 上表现优越" without listing the benchmarks or numbers.
-- Listing datasets without saying which baseline was compared on which dataset.
-- Empty or single-sentence Results sections.
-
-### Method Page Template
-
-Each page in `wiki/domains/<domain>/methods/` should usually include:
-
-1. `## Definition`
-2. `## Core Mechanism`
-3. `## Assumptions`
-4. `## Evidence`
-5. `## Variants`
-6. `## Strengths and Weaknesses`
-7. `## Connections`
-8. `## Open Questions`
-
-### Dataset Page Template
-
-Each page in `wiki/domains/<domain>/datasets/` should usually include:
-
-1. `## Description`
-2. `## Use Cases`
-3. `## Splits and Protocols`
-4. `## Known Caveats`
-5. `## Papers Using It`
-6. `## Connections`
-7. `## Open Questions`
-
-### Task Page Template
-
-Each page in `wiki/domains/<domain>/tasks/` should usually include:
-
-1. `## Definition`
-2. `## Evaluation Setup`
-3. `## Common Datasets`
-4. `## Common Metrics`
-5. `## Representative Methods`
-6. `## Open Questions`
-
-### Metric Page Template
-
-Each page in `wiki/domains/<domain>/metrics/` should usually include:
-
-1. `## Definition`
-2. `## Interpretation`
-3. `## Failure Modes`
-4. `## Used By`
-5. `## Connections`
-6. `## Open Questions`
-
-### Concept or Entity Page Template
-
-Each durable page in `concepts/` or `entities/` should usually include:
-
-1. `## Definition` or `## Description`
-2. `## Current Understanding`
-3. `## Evidence`
-4. `## Connections`
-5. `## Open Questions`
-
-### Topic Page Template
-
-Each page in `wiki/domains/<domain>/topics/` should usually include:
-
-1. `## Current Thesis`
-2. `## Scope`
-3. `## Key Threads`
-4. `## Atomic Claims`
-5. `## Evidence`
-6. `## Tensions`
-7. `## Open Questions`
-
-Topic pages are for ongoing synthesis, not one-off notes.
-
-### Comparison Page Template
-
-Each page in `wiki/domains/<domain>/comparisons/` should usually include:
-
-1. `## Question`
-2. `## Scope`
-3. `## Comparison Table`
-4. `## Findings`
-5. `## Caveats`
-6. `## Evidence`
-7. `## Follow-up`
-
-Use comparison pages for method families, benchmark result tables, dataset/task coverage matrices, assumption and limitation matrices, or chronological development maps.
-
-### Analysis Page Template
-
-Each page in `wiki/domains/<domain>/analyses/` should usually include:
-
-1. `## Question`
-2. `## Answer` or `## Findings`
-3. `## Evidence`
-4. `## Implications`
-5. `## Follow-up`
-
-Create an analysis page when a query produces something likely to be reused.
-
-## Atomic Claims
-
-Topic, method, comparison, and analysis pages should accumulate atomic claims when useful. An atomic claim is a short, reusable, evidence-bound research statement.
-
-Recommended format:
-
-```md
-- Claim: concise falsifiable statement.
-  Evidence: [Paper Title](../papers/example-paper.md), section/table/figure if known.
-  Scope: dataset, modality, threat model, assumption, or experimental setting.
-  Confidence: low | medium | high.
-  Tensions: competing or incompatible evidence, if any.
-```
-
-Use atomic claims to support literature reviews, experimental decisions, and contradiction tracking. Do not invent precision that the source does not support.
-
-## Linking Rules
-
-- Use relative markdown links, not absolute local file paths.
-- Link every new page from at least one existing page plus `wiki/index.md`.
-- When a paper informs an existing method, dataset, task, metric, concept, topic, or comparison page, update that page instead of leaving the connection implicit.
-- Link from reusable research object pages back to the paper pages that support them.
-- Add a `## Connections` section whenever a page references multiple related pages.
-- If a page becomes central, make sure several other pages link to it.
-
-## Paper Ingest Workflow
-
-Use this workflow whenever a paper is added by file, pasted text, or URL.
-
-1. Capture the paper into `raw/sources/` with canonical naming (`YYYY-MM-DD-short-title.ext`). Move the original file from `raw/inbox/` — do not leave duplicates.
-2. Never modify the raw source again after capture, except to add a missing asset or metadata sidecar at ingest time.
-3. Extract or record bibliographic metadata: title, authors, year, venue, DOI/arXiv, code, and project page when available.
-4. Read the paper to the depth possible in the session and set `evidence_level`.
-5. Choose exactly one primary domain under `wiki/domains/`.
-6. Create or update the corresponding paper page in `wiki/domains/<domain>/papers/`; use `sources/` only for legacy pages during migration.
-7. Fill contribution, problem setting, method, experiments, results, limitations, reusable claims, connections, open questions, and provenance. **For experiments and results, extract concrete numbers, baseline names, dataset sizes, training hyperparameters, and ablation deltas from the source. Never replace a number with a qualitative phrase like "显著提升."**
-8. Identify impacted methods, datasets, tasks, metrics, concepts, topics, comparisons, and analyses.
-9. Create missing durable pages only when they are central, recurring, or explicitly requested.
-10. Add atomic claims to relevant topic, method, or comparison pages when they will be reused.
-11. Update comparison pages if the paper changes the state of a method family, benchmark, dataset, metric, or chronology.
-12. Update `wiki/index.md`.
-13. Append an entry to `wiki/log.md`.
-14. Report what changed and what remains uncertain.
-
-Minimum acceptable paper ingest:
-
-- one raw source captured or referenced,
-- one paper page created or updated,
-- `evidence_level` recorded,
-- **at least one concrete number in the Results section** (accuracy, FPR, regret, etc.),
-- `wiki/index.md` updated,
-- `wiki/log.md` updated.
-
-Preferred paper ingest:
-
-- relevant method, dataset, task, metric, concept, topic, and comparison pages are also updated so the knowledge compounds immediately.
-- Experiments section includes datasets with sizes, baseline names, and training hyperparameters.
-- Results section captures the best method, strongest baseline, and the gap for each main claim.
-- Ablation deltas are recorded when present in the source.
-
-## Query Workflow
-
-Use this workflow whenever asked a question about the wiki.
-
-1. Read `wiki/index.md` first.
-2. Read the most relevant paper and synthesis pages.
-3. Answer from the wiki, citing the pages used.
-4. Distinguish evidence from inference.
-5. State evidence level when it affects confidence.
-6. If the answer creates durable insight, file it into an existing page or create a page in `wiki/domains/<domain>/analyses/` or `comparisons/`.
-7. If the question exposes a gap, say so clearly and optionally suggest the next paper to ingest or section to read.
-
-Do not answer as though the wiki contains knowledge that has not actually been filed.
-
-## Compare Workflow
-
-Use this workflow when asked how papers, methods, datasets, metrics, or research threads differ.
-
-1. Read the relevant paper pages and existing topic/comparison pages.
-2. Normalize the comparison dimensions before writing conclusions.
-3. Separate method differences from evaluation-setting differences.
-4. Include datasets, metrics, baselines, assumptions, and limitations when they affect interpretation.
-5. Record incompatible settings instead of forcing a false ranking.
-6. Create or update a `comparisons/` page if the result is likely to be reused.
-7. Update `wiki/index.md` and append `wiki/log.md` when a durable page changes.
-
-## Lint Workflow
-
-Use this workflow periodically or when asked to "health-check" the wiki.
-
-Look for:
-
-- paper pages without `evidence_level`,
-- paper pages missing bibliographic metadata,
-- raw sources without paper pages,
-- paper pages not linked from topic, method, or comparison pages,
-- claims without supporting paper pages,
-- benchmark claims without datasets, metrics, or evaluation setup,
-- contradictions between pages,
-- stale claims superseded by newer sources,
-- orphan pages with few or no inbound links,
-- recurring methods, datasets, tasks, or metrics that do not yet have pages,
-- missing cross-references,
-- weak or missing provenance,
-- empty sections or abandoned seed pages,
-- opportunities to merge duplicate pages,
-- pages that appear to live in the wrong domain.
-
-Every lint pass should be logged in `wiki/log.md`.
-
-## Index Rules
-
-`wiki/index.md` is content-oriented and must stay readable by both humans and agents.
-
-Rules:
-
-- Organize by domain first, then by page type.
-- For research domains, expose papers, methods, datasets, tasks, metrics, concepts, topics, comparisons, and analyses.
-- Keep entries short and scannable.
-- Include a one-line description for each page.
-- Include evidence level or source count when useful.
-- Prefer alphabetical order within sections unless recency is more useful.
-- Include an open reading queue or high-value open questions when they guide future work.
-- Update the index every time a durable page is added or materially repurposed.
-
-Recommended entry format:
-
-```md
-- [Page Title](domains/example-domain/papers/example-paper.md): one-line summary. Evidence: full-paper. Updated: YYYY-MM-DD. Sources: N.
-```
-
-## Log Rules
-
-`wiki/log.md` is chronological and append-only.
-
-Rules:
-
-- Each entry begins with `## [YYYY-MM-DD] action | title`.
-- Use one of these actions when possible: `setup`, `ingest`, `query`, `analysis`, `compare`, `lint`, `schema`, `organize`.
-- Record changed files, key takeaways, and unresolved questions when relevant.
-- Keep entries concise but informative.
-
-Recommended entry format:
-
-```md
-## [YYYY-MM-DD] ingest | Paper Title
-- Raw source: [../raw/sources/example-paper.pdf](../raw/sources/example-paper.pdf)
-- Updated: [domains/example-domain/papers/example-paper.md](domains/example-domain/papers/example-paper.md), [domains/example-domain/methods/example-method.md](domains/example-domain/methods/example-method.md)
-- Evidence level: full-paper
-- Key takeaways: one or two bullets worth of lasting memory
-- Open loops: unresolved question or `none`
-```
-
-## Contradictions and Uncertainty
-
-- Do not erase older claims simply because a new paper disagrees.
-- Update the relevant pages with the new claim and note the conflict.
-- Prefer sections like `## Tensions`, `## Disagreements`, `## Caveats`, or `## Open Questions` over hidden ambiguity.
-- If confidence is low, say so directly.
-- When evaluation settings differ, describe the mismatch before comparing results.
-- If a claim is based on abstract-only or skimmed evidence, mark that limitation.
-
-## Page Creation Heuristics
-
-Create a new durable page when at least one of these is true:
-
-- the paper, method, dataset, task, metric, concept, or entity is central to the user's research interests,
-- the item appears in multiple sources,
-- the page will likely be revisited,
-- the material would otherwise bloat a multi-purpose page,
-- the user explicitly wants the subject tracked,
-- a comparison would prevent repeated ad hoc reasoning.
-
-Do not create pages for every passing mention.
-
-## Maintenance Heuristics
-
-- Prefer editing a page in place over creating a fresh duplicate.
-- Merge duplicates when two pages clearly represent the same thing.
-- If a page is superseded, mark it as such and point to the newer canonical page.
-- If a page is important but weakly connected, add inbound links from related pages or the index.
-- If a page has gone stale, refresh it during the next relevant ingest or query.
-- If a page seems misplaced, prefer moving it within `wiki/domains/` over copying it.
-- During migration, preserve legacy `sources/` links until the corresponding `papers/` page exists and inbound links have been updated.
-
-## Working Style
-
-- Keep the wiki clean, explicit, and easy to navigate.
-- Prefer durable markdown over hidden tool state.
-- Surface assumptions when they affect structure, interpretation, or confidence.
-- Ask before destructive reorganizations, deletions, or large renames.
-- When the user asks for help, improve the wiki itself whenever that improvement will pay off in future sessions.
-- Treat paper summaries as research infrastructure, not disposable notes.
-- Write maintained wiki content in Chinese unless the user explicitly requests another language.
-
-## Current Operating Defaults
-
-These defaults apply until the user changes them:
-
-- Ingest papers one at a time.
-- Use the wiki itself as the main retrieval layer before introducing external search tooling.
-- File substantial answers back into the wiki when they are likely to matter again.
-- Prefer new paper pages under `papers/`; treat existing `sources/` pages as legacy paper pages until migrated.
-- Record evidence level on paper pages.
-- Update comparison pages when a paper changes a method family, benchmark, or research-thread interpretation.
-- Treat this workspace as the long-term research paper knowledge base.
+构建持久、可积累的科研 wiki，支持文献综述、实验规划、相关工作写作和研究综合。知识编译一次、保持更新、明确溯源、通过可复用的论文页、方法页、数据集页等链接起来。
+
+## 核心原则
+
+- Raw sources 不可变
+- Wiki 受证据约束，不发明不存在的知识
+- 每条持久 claim 追溯到论文页和原始来源
+- 区分证据等级：abstract-only / skimmed / full-paper / reproduced
+- 矛盾和不兼容设置明确记录，不擦除旧 claim
+- 可复用洞察存入 wiki，不留在聊天记录中
+- 更新旧页面优先于创建新页面
+- 数量化：不说"显著优于 SOTA"，说具体数字
+
+## 语言
+
+- Wiki 内容默认中文
+- 保留原始论文标题、作者、DOI、arXiv、代码链接的原文
+- Raw sources 保持原文不变
+
+## Workspace 结构
+
+- `raw/inbox/` — 待处理论文
+- `raw/sources/` — 不可变原始文件（规范命名 YYYY-MM-DD-short-title.ext）
+- `raw/assets/` — 不可变二进制资产
+- `wiki/index.md` — 内容目录，第一检索入口
+- `wiki/log.md` — 追加式时间线
+- `wiki/domains/` — 按领域分层的研究知识
+
+## Domain 架构
+
+每个领域包含：papers/、methods/、datasets/、tasks/、metrics/、concepts/、entities/、topics/、comparisons/、analyses/、reading-notes/。
+
+当前领域：meta、distillation、outofdistributiondetection、spectrum、autonomous-driving、federated-learning、llm-reasoning。
+
+每条持久页面属于且仅属于一个领域子树。跨领域时放主要复用语境的领域并交叉链接。
+
+## Request 模式
+
+- **ingest** — 新增论文或来源
+- **query** — 基于 wiki 回答问题
+- **analysis** — 创建比较、备忘、综述
+- **lint** — 审计质量、矛盾、缺口
+- **compare** — 方法/数据集/基准比较
+- **schema** / **organize** / **reading-plan** — 结构调整和阅读规划
+
+默认行为：在 workspace 中执行操作，不只是描述应该做什么。
+
+## Paper Ingest
+
+核心规则：**论文正文分析不放在主 agent 或 autoresearch 主 session 中执行。** 本 agent 负责 PDF→文本提取 + 通过 sessions_spawn 创建 isolated context 的分析会话（每个论文一个分析会话，非 OpenClaw 注册的命名子 agent）。
+
+Ingest 按 Execute-Verify-Report 模式执行，每步验证后再进入下一步：
+
+### 步骤 1：Capture（捕获）
+
+1. 捕获 raw source → 规范命名移入 raw/sources/
+2. **Verify**：文件存在、可读、非空（size > 0）
+3. 失败时：重试 1 次（检查路径/权限），仍失败则报告错误并停止
+
+### 步骤 2：Extract（提取）
+
+1. 提取全文保存到 raw/sources/
+2. **Verify**：提取文本有足够长度（非空、非乱码），包含论文基本结构
+3. 失败时：尝试替代提取方法 1 次，仍失败则报告错误并停止
+
+### 步骤 3：Spawn Sub-agent（子 agent 分析）
+
+1. 为每篇论文 spawn 一个 isolated context 的子 agent（一论文一子 agent，不批量）
+2. **Verify**：产出存在、≥100 行、有 evidence_level、Results 有具体数字
+3. 失败时：重新 spawn 并附带聚焦指令（指定缺失部分），最多 1 次重试
+4. 重试后仍不通过：标注当前产出状态和具体缺失，报告给 main agent
+
+### 步骤 4：Update Index（更新索引）
+
+1. 更新 wiki/index.md 和 wiki/log.md
+2. **Verify**：index 条目链接正确、log 条目为追加式（未覆盖已有内容）
+3. 失败时：停止并报告，不跳过索引更新继续操作
+
+### 最低可接受 Ingest
+
+- 一个 raw source 已捕获
+- 一份全文已提取
+- 一个 paper page 已创建（≥100 行，有 evidence_level，Results 有具体数字）
+- wiki/index.md 和 wiki/log.md 已更新
+
+## Query 和 Compare
+
+1. 先读 wiki/index.md
+2. 读相关论文和综合页面
+3. 基于 wiki 回答，引用使用的页面
+4. 区分证据和推断，标注 evidence level
+5. 持久洞察存入 analyses/ 或 comparisons/
+6. 查询暴露的缺口要明确说明
+
+子 agent 委托模板见 `references/wiki-conventions.md`。页面模板和 frontmatter 规范见 `references/page-templates.md`。
+
+## Lint
+
+定期或被要求时检查：
+
+- 缺 evidence_level 的论文页
+- 缺少元数据的论文页
+- 无 paper page 的 raw source
+- 无入站链接的孤立页面
+- 矛盾 claim
+- 过时的 superseded 页面
+- 重复或错放的页面
+
+每次 lint 记入 wiki/log.md。
+
+> **注**：周期性 lint 可由 main agent 通过 OpenClaw Cron 调度（参考 `docs/automation-overview.md` → Scheduled Tasks）。当前为按需触发。
+
+## 边界
+
+- 不修改 raw/ 下的原始文件
+- 不确定时标"待验证"，不假装知道
+- 破坏性操作先确认再执行
+- 不向外部泄露论文 PDF 内容
+
+## 记忆
+
+- 过程性记录放 `memory/YYYY-MM-DD.md`
+- 长期经验放 `MEMORY.md`

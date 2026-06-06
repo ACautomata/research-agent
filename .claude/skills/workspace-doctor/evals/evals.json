@@ -1,0 +1,56 @@
+{
+  "skill_name": "workspace-doctor",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "检查所有 workspace 的一致性，看看有没有文件缺失或者和 openclaw.json 不匹配的地方",
+      "expected_output": "A table showing consistency check results for all 5 agents covering directory existence, file presence, allowAgents sync, etc.",
+      "files": [],
+      "assertions": [
+        {"name": "covers-all-agents", "type": "contains_all", "values": ["main", "autoresearch", "paper-review", "idea-generate", "reviewer"], "description": "Report mentions all 5 registered agents"},
+        {"name": "checks-directory-exists", "type": "contains_any", "values": ["directory", "目录", "存在", "exists", "present"], "description": "Report checks whether workspace directories exist"},
+        {"name": "checks-required-files", "type": "contains_any", "values": ["SOUL", "AGENTS", "缺失", "missing", "required", "必需"], "description": "Report checks for presence of required workspace files"},
+        {"name": "checks-allowagents-sync", "type": "contains_any", "values": ["allowAgents", "subagents", "注册", "registered", "sync"], "description": "Report checks allowAgents synchronization"},
+        {"name": "structured-format", "type": "contains_any", "values": ["|", "✅", "❌", "⚠️", "PASS", "FAIL"], "description": "Report uses structured format (table or status markers)"},
+        {"name": "no-modifications", "type": "not_contains", "values": ["已创建", "已修改", "已删除", "created", "deleted", "updated"], "description": "Validation-only task should not modify any files"}
+      ]
+    },
+    {
+      "id": 1,
+      "prompt": "帮我创建一个新的 translation agent，负责把 wiki 条目翻译成英文。agent id 用 translation",
+      "expected_output": "New workspace-translation/ directory with all 8 required files, openclaw.json patch, allowAgents patch.",
+      "files": [],
+      "assertions": [
+        {"name": "creates-soul-md", "type": "file_exists", "path": "outputs/workspace-translation/SOUL.md", "description": "SOUL.md file created"},
+        {"name": "creates-agents-md", "type": "file_exists", "path": "outputs/workspace-translation/AGENTS.md", "description": "AGENTS.md file created"},
+        {"name": "creates-identity-md", "type": "file_exists", "path": "outputs/workspace-translation/IDENTITY.md", "description": "IDENTITY.md file created"},
+        {"name": "creates-all-8-files", "type": "file_count", "path": "outputs/workspace-translation/", "min": 8, "description": "All 8 required workspace files created"},
+        {"name": "soul-has-core-sections", "type": "file_contains_all", "path": "outputs/workspace-translation/SOUL.md", "values": ["身份", "核心", "风格", "边界"], "description": "SOUL.md has required section structure"},
+        {"name": "soul-mentions-translation", "type": "file_contains_any", "path": "outputs/workspace-translation/SOUL.md", "values": ["翻译", "translation", "translate", "英文", "English"], "description": "SOUL.md references translation role"},
+        {"name": "agents-has-procedures", "type": "file_contains_any", "path": "outputs/workspace-translation/AGENTS.md", "values": ["会话启动", "核心职责", "任务流程", "流程"], "description": "AGENTS.md has procedural sections"},
+        {"name": "openclaw-patch-created", "type": "file_exists", "path": "outputs/openclaw-agents-list-patch.json", "description": "openclaw.json agents.list patch created"},
+        {"name": "allowagents-patch-created", "type": "file_exists", "path": "outputs/openclaw-allowagents-patch.json", "description": "allowAgents patch created"},
+        {"name": "workspace-path-correct", "type": "file_contains_any", "path": "outputs/openclaw-agents-list-patch.json", "values": ["workspace-translation"], "description": "Patch references correct workspace path"},
+        {"name": "allowagents-includes-translation", "type": "file_contains_any", "path": "outputs/openclaw-allowagents-patch.json", "values": ["translation"], "description": "allowAgents patch includes translation"},
+        {"name": "summary-created", "type": "file_exists", "path": "outputs/summary.md", "description": "Summary of changes created"}
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "把 autoresearch 的 SOUL.md 更新一下，加上一条新原则：对跨论文关联要保持敏感，发现不同论文之间的方法对比或继承关系时要主动建立连接",
+      "expected_output": "Updated SOUL.md with new cross-paper principle, preserving all existing content.",
+      "files": [],
+      "assertions": [
+        {"name": "soul-file-created", "type": "file_exists", "path": "outputs/SOUL.md", "description": "Updated SOUL.md saved to outputs"},
+        {"name": "diff-file-created", "type": "file_exists", "path": "outputs/diff.md", "description": "Diff explanation saved"},
+        {"name": "has-cross-paper-principle", "type": "file_contains_any", "path": "outputs/SOUL.md", "values": ["跨论文", "方法对比", "继承关系", "关联"], "description": "New principle about cross-paper connections is present"},
+        {"name": "preserves-identity-section", "type": "file_contains_any", "path": "outputs/SOUL.md", "values": ["## 身份"], "description": "Existing 身份 section preserved"},
+        {"name": "preserves-core-section", "type": "file_contains_any", "path": "outputs/SOUL.md", "values": ["## 核心"], "description": "Existing 核心 section preserved"},
+        {"name": "preserves-style-section", "type": "file_contains_any", "path": "outputs/SOUL.md", "values": ["## 风格"], "description": "Existing 风格 section preserved"},
+        {"name": "preserves-boundary-section", "type": "file_contains_any", "path": "outputs/SOUL.md", "values": ["## 边界"], "description": "Existing 边界 section preserved"},
+        {"name": "uses-bold-principle-format", "type": "file_contains_any", "path": "outputs/SOUL.md", "values": ["**"], "description": "New principle uses bold summary + explanation format"},
+        {"name": "preserves-original-content", "type": "file_contains_any", "path": "outputs/SOUL.md", "values": ["严谨", "可溯源", "主动维护"], "description": "Original core principles preserved"}
+      ]
+    }
+  ]
+}

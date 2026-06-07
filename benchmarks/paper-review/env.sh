@@ -13,6 +13,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 QA_SRC="${HERE}/qa.jsonl"
 MATERIALS_SRC="${HERE}/materials"
 [[ -f "${QA_SRC}" ]] || { echo "missing ${QA_SRC} (run build_qa.py first)" >&2; exit 1; }
+rm -f "${HERE}/.wiki-import-failed" "${HERE}/.wiki-import-stderr.log"
 
 log() { printf '\n[paper-review.env] %s\n' "$*"; }
 
@@ -31,17 +32,25 @@ docker cp "${QA_SRC}" "${BENCH_CONTAINER}:${BENCH_MOUNT}/workspace-paper-review/
 
 if [[ -d "${MATERIALS_SRC}" ]]; then
   log "staging materials (${MATERIALS_SRC})"
-  docker exec "${BENCH_CONTAINER}" mkdir -p \
-    "${BENCH_MOUNT}/workspace-paper-review/bench-fixtures/materials"
-  tar -C "${MATERIALS_SRC}" -cf - . | \
-    docker cp - "${CONTAINER:-${BENCH_CONTAINER}}:${BENCH_MOUNT}/workspace-paper-review/bench-fixtures/materials/" \
-    || docker exec "${BENCH_CONTAINER}" bash -lc \
-        "rm -rf ${BENCH_MOUNT}/workspace-paper-review/bench-fixtures/materials && mkdir -p ${BENCH_MOUNT}/workspace-paper-review/bench-fixtures/materials"
+  docker exec "${BENCH_CONTAINER}" bash -lc \
+    "rm -rf '${BENCH_MOUNT}/workspace-paper-review/bench-fixtures/materials' && mkdir -p '${BENCH_MOUNT}/workspace-paper-review/bench-fixtures/materials'"
   for f in "${MATERIALS_SRC}"/*; do
     [[ -f "$f" ]] || continue
     docker cp "$f" "${BENCH_CONTAINER}:${BENCH_MOUNT}/workspace-paper-review/bench-fixtures/materials/$(basename "$f")"
   done
 fi
+
+# OpenClaw tools resolve relative paths from ${BENCH_MOUNT}/workspace. The QA
+# prompts intentionally mention repo-relative material paths such as
+# benchmarks/paper-review/materials/wiki/react-wiki.md, so expose the copied
+# benchmark tree from that workspace root.
+log "linking repo benchmarks into OpenClaw workspaces"
+docker exec "${BENCH_CONTAINER}" bash -lc \
+  "for ws in workspace workspace-paper-review; do
+     mkdir -p '${BENCH_MOUNT}/\${ws}'
+     rm -rf '${BENCH_MOUNT}/\${ws}/benchmarks'
+     ln -s '${BENCH_MOUNT}/benchmarks' '${BENCH_MOUNT}/\${ws}/benchmarks'
+   done"
 
 log "ensuring output dir"
 docker exec "${BENCH_CONTAINER}" mkdir -p \
@@ -53,16 +62,12 @@ docker exec "${BENCH_CONTAINER}" mkdir -p \
 # failure marker that metrics.py picks up and the benchmark scores 0.
 #
 # NOTE: Wiki import is NOT part of the benchmark evaluation flow. Each QA
-# seed reads materials directly from the filesystem (seed-001/002 via file
-# paths) or from inline text in the prompt (seed-003–008). The wiki is a
-# production concern handled by the autoresearch agent. Commented out to
-# save ~600s of agent invocation time per run; uncomment to compare.
+# reads materials from staged fixture paths or inline upstream summaries in
+# the prompt. The wiki ingest/read path belongs to integration benchmarks, not
+# this paper-review single-agent skill benchmark. The disabled block below is
+# kept only as a historical/manual comparison helper.
 # ---------------------------------------------------------------------------
 : <<'WIKI_IMPORT_DISABLED'
-
-# Clean stale marker from a previous run
-rm -f "${HERE}/.wiki-import-failed"
-rm -f "${HERE}/.wiki-import-stderr.log"
 
 log "staging MD materials into autoresearch inbox"
 WIKI_INBOX="${BENCH_MOUNT}/workspace-autoresearch/raw/inbox/bench-${BENCH_RUN_ID}"

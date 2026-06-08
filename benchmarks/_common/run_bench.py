@@ -572,6 +572,13 @@ def main(bench_name: str, agent_id: str | None = None) -> int:
                            f"{len(answer or '')} chars)")
             print(f"::group::{group_title}")
             print(answer or "(no agent response)")
+            # When the agent CLI fails (non-zero exit), surface raw stderr
+            # so the CI logs show what went wrong instead of just the
+            # stripped sentinel.
+            if raw.get("returncode", 0) != 0 and raw.get("stderr", "").strip():
+                print("")
+                print("--- raw agent stderr (exit={}) ---".format(raw.get("returncode")))
+                print(raw["stderr"].strip()[:8000])
             print("::endgroup::")
             result_entry = {
                 "qa_id": qa["qa_id"], "task_type": qa.get("task_type"),

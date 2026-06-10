@@ -184,12 +184,12 @@ defaults["sandbox"] = {"mode": "off"}
 # YOLO mode: auto-approve all tool calls so CI never stalls on prompts.
 defaults["elevatedDefault"] = "full"
 tools = data.setdefault("tools", {})
-tools.setdefault("exec", {})["mode"] = "yolo"
+tools.setdefault("exec", {})["mode"] = "full"
 p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 print("patched models.providers.minimax.apiKey -> SecretRef(MINIMAX_API_KEY)")
 print("patched agents.defaults.sandbox.mode -> off")
 print("patched agents.defaults.elevatedDefault -> full")
-print("patched tools.exec.mode -> yolo (no-approval)")
+print("patched tools.exec.mode -> full (no-approval)")
 '
   docker exec "${container}" chown 1000:1000 /home/node/.openclaw/openclaw.json
 }
@@ -321,12 +321,12 @@ defaults["sandbox"] = {"mode": "off"}
 # YOLO mode: auto-approve all tool calls so CI never stalls on prompts.
 defaults["elevatedDefault"] = "full"
 tools = data.setdefault("tools", {})
-tools.setdefault("exec", {})["mode"] = "yolo"
+tools.setdefault("exec", {})["mode"] = "full"
 p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 print("patched models.providers.minimax.apiKey -> SecretRef(MINIMAX_API_KEY)")
 print("patched agents.defaults.sandbox.mode -> off")
 print("patched agents.defaults.elevatedDefault -> full")
-print("patched tools.exec.mode -> yolo (no-approval)")
+print("patched tools.exec.mode -> full (no-approval)")
 '
   docker exec "\${container}" chown 1000:1000 /home/node/.openclaw/openclaw.json
 }

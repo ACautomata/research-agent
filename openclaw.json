@@ -69,7 +69,7 @@
         "delegationMode": "prefer",
         "maxConcurrent": 8,
         "maxSpawnDepth": 2,
-        "allowAgents": ["orchestrate", "ingest", "curate", "extract", "critic", "design", "spec", "audit", "ideate", "judge"]
+        "allowAgents": ["orchestrate", "ingest", "curate", "extract", "critic", "design", "spec", "tuning", "optimizer", "audit", "ideate", "judge"]
       }
     },
     "list": [
@@ -113,6 +113,16 @@
         "id": "spec",
         "name": "Spec",
         "workspace": "~/.openclaw/workspace/spec"
+      },
+      {
+        "id": "tuning",
+        "name": "Tuning",
+        "workspace": "~/.openclaw/workspace/tuning"
+      },
+      {
+        "id": "optimizer",
+        "name": "Optimizer",
+        "workspace": "~/.openclaw/workspace/optimizer"
       },
       {
         "id": "audit",

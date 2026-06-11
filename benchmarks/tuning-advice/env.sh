@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# benchmarks/tuning-advice/env.sh
+set -euo pipefail
+
+: "${BENCH_CONTAINER:?must be exported by env_setup.sh}"
+: "${BENCH_MOUNT:?must be exported by env_setup.sh}"
+: "${BENCH_RUN_ID:=local}"
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+. "${HERE}/_env_shared.sh" 2>/dev/null || true

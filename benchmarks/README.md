@@ -63,20 +63,23 @@ benchmarks/
 cp docker/.env.bench.example docker/.env.bench
 # then edit docker/.env.bench and set MINIMAX_API_KEY.
 
-# 2) Unified env (one per shell; it exports BENCH_CONTAINER etc.)
+# 2) Run exactly one benchmark in the local containerized CI env.
+# Auto prefers a running Docker daemon, then falls back to Apple's `container` CLI.
+benchmarks/_common/run_local_benchmark.sh idea-generate-1
+
+# Force a runtime when needed:
+benchmarks/_common/run_local_benchmark.sh --runtime docker idea-generate-1
+benchmarks/_common/run_local_benchmark.sh --runtime container idea-generate-1
+
+# Optional: keep the container around for inspection, or dump BENCH_DEBUG artifacts.
+benchmarks/_common/run_local_benchmark.sh --keep-container --debug paper-ingest
+
+# 3) Advanced/manual equivalent
 bash benchmarks/_common/env_setup.sh
-
-# 3) Run any benchmark
-bash benchmarks/idea-generate/env.sh
-python3 benchmarks/idea-generate/metrics.py
-cat benchmarks/idea-generate/bench-report.json | jq
-
-# 4) Or run the whole suite + post a comment
-for b in $BENCH_TARGETS; do
-  bash benchmarks/$b/env.sh
-  python3 benchmarks/$b/metrics.py
-done
-python3 benchmarks/_common/report_pr.py
+source .bench-runtime/bench-runtime-env.sh
+bash benchmarks/idea-generate-1/env.sh
+python3 benchmarks/idea-generate-1/metrics.py
+cat benchmarks/idea-generate-1/bench-report.json | jq
 ```
 
 ## Legacy notes

@@ -285,13 +285,33 @@ def _extract_qa_sessions(container: str, session_key: str,
         print(f"[sessions] warning: main session key {session_key!r} not found "
               f"in sessions.json", file=sys.stderr)
 
-    # ---- 2. Discover child sessions via SQLite ---------------------------
+    # ---- 2. Discover descendant sessions via SQLite ----------------------
     child_keys: list[tuple[str, str]] = []  # (session_key, agent_id)
+    seen_session_keys: set[str] = {session_key}
+
+    def add_child_session(child_key: str, agent_id: str) -> bool:
+        """Remember one descendant session if we have not seen it before."""
+        if not child_key or child_key in seen_session_keys:
+            return False
+        if not agent_id or agent_id not in _AGENT_IDS:
+            agent_id = _agent_id_from_session_key(child_key)
+        child_keys.append((child_key, agent_id))
+        seen_session_keys.add(child_key)
+        return True
+
     try:
         query = (
-            "SELECT child_session_key, workspace_dir FROM subagent_runs "
-            "WHERE controller_session_key = "
+            "WITH RECURSIVE descendants(child_session_key, workspace_dir) AS ("
+            "  SELECT child_session_key, workspace_dir FROM subagent_runs"
+            "  WHERE controller_session_key = "
             f"{_sqlite_string_literal(session_key)}"
+            "  UNION"
+            "  SELECT runs.child_session_key, runs.workspace_dir"
+            "  FROM subagent_runs AS runs"
+            "  JOIN descendants AS prev"
+            "    ON runs.controller_session_key = prev.child_session_key"
+            ") "
+            "SELECT child_session_key, workspace_dir FROM descendants"
         )
         proc = subprocess.run(
             ["docker", "exec", container, "sqlite3", "-readonly",
@@ -310,27 +330,44 @@ def _extract_qa_sessions(container: str, session_key: str,
                     ws_rel = ws_dir.replace(f"{_SESSION_MOUNT}/workspace/", "")
                     if ws_rel and ws_rel != ws_dir:
                         agent_id = ws_rel.split("/")[0]
-                if not agent_id or agent_id not in _AGENT_IDS:
-                    agent_id = _agent_id_from_session_key(child_key)
-                child_keys.append((child_key, agent_id))
+                add_child_session(child_key, agent_id)
+        elif proc.returncode != 0:
+            print(
+                "[sessions] warning: SQLite child-session query failed: "
+                f"{(proc.stderr or proc.stdout).strip()}",
+                file=sys.stderr,
+            )
     except (subprocess.TimeoutExpired, OSError) as e:
         print(f"[sessions] warning: SQLite child-session query failed: {e}", file=sys.stderr)
 
     # ---- 3. Fallback: scan all agent sessions.json for spawnedBy ---------
-    if not child_keys:
-        for agent_id in _AGENT_IDS:
-            agent_sessions = _container_cat(
-                container, f"{_SESSION_MOUNT}/agents/{agent_id}/sessions/sessions.json"
-            )
-            if not agent_sessions:
-                continue
-            try:
-                agent_index = json.loads(agent_sessions)
-            except json.JSONDecodeError:
-                continue
+    # Always run the fallback as an augmentation path.  Some session indexes
+    # have spawnedBy links that are absent from SQLite, and nested sub-agents
+    # may be spawned by a direct child rather than by the original main session.
+    agent_session_indexes: dict[str, dict[str, dict]] = {}
+    for agent_id in _AGENT_IDS:
+        agent_sessions = _container_cat(
+            container, f"{_SESSION_MOUNT}/agents/{agent_id}/sessions/sessions.json"
+        )
+        if not agent_sessions:
+            continue
+        try:
+            agent_session_indexes[agent_id] = json.loads(agent_sessions)
+        except json.JSONDecodeError:
+            continue
+
+    pending_parent_keys = list(seen_session_keys)
+    scanned_parent_keys: set[str] = set()
+    while pending_parent_keys:
+        parent_key = pending_parent_keys.pop(0)
+        if parent_key in scanned_parent_keys:
+            continue
+        scanned_parent_keys.add(parent_key)
+        for agent_id, agent_index in agent_session_indexes.items():
             for key, entry in agent_index.items():
-                if entry.get("spawnedBy") == session_key:
-                    child_keys.append((key, agent_id))
+                if entry.get("spawnedBy") == parent_key:
+                    if add_child_session(key, agent_id):
+                        pending_parent_keys.append(key)
 
     # ---- 4. Copy child session JSONLs ------------------------------------
     # Also snapshot each agent's sessions.json so we have the cross-reference.

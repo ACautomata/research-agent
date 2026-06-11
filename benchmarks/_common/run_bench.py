@@ -143,6 +143,11 @@ def _container_cat(container: str, path: str) -> str | None:
     return None
 
 
+def _sqlite_string_literal(value: str) -> str:
+    """Return *value* as a safely escaped SQLite string literal."""
+    return "'" + value.replace("'", "''") + "'"
+
+
 def _container_find_session_jsonl(container: str, agent_id: str,
                                   session_id: str) -> str | None:
     """Return the container-side path to a session JSONL file, or None."""
@@ -283,12 +288,14 @@ def _extract_qa_sessions(container: str, session_key: str,
     # ---- 2. Discover child sessions via SQLite ---------------------------
     child_keys: list[tuple[str, str]] = []  # (session_key, agent_id)
     try:
+        query = (
+            "SELECT child_session_key, workspace_dir FROM subagent_runs "
+            "WHERE controller_session_key = "
+            f"{_sqlite_string_literal(session_key)}"
+        )
         proc = subprocess.run(
             ["docker", "exec", container, "sqlite3", "-readonly",
-             f"{_SESSION_MOUNT}/state/openclaw.sqlite",
-             "SELECT child_session_key, workspace_dir FROM subagent_runs "
-             "WHERE controller_session_key = ?",
-             session_key],
+             f"{_SESSION_MOUNT}/state/openclaw.sqlite", query],
             capture_output=True, text=True, timeout=10,
         )
         if proc.returncode == 0 and proc.stdout.strip():

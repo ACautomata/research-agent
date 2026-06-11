@@ -30,7 +30,7 @@ def _load(path: Path) -> dict:
 
 
 def _summarize(report: dict) -> dict:
-    results = report.get("results") or []
+    results = [r for r in (report.get("results") or []) if not r.get("skipped")]
     total = len(results)
     if total == 0:
         return {"total": 0, "passed": 0, "pass_rate": 0.0, "avg_score": 0.0, "weight": 0.0}
@@ -91,7 +91,28 @@ def render(results_dir: Path, base: dict | None) -> str:
         lines.append("### Top failures")
         lines.append("")
         for f in failures[:5]:
-            lines.append(f"- `{f['bench']}/{f.get('qa_id', '?')}` — {f.get('rationale', '')[:200]}")
+            tags = []
+            if f.get("agent_error"):
+                tags.append(f"agent_error={f['agent_error']}")
+            if f.get("judge_error"):
+                tags.append(f"judge_error={f['judge_error']}")
+            if f.get("judge_fallback"):
+                tags.append(f"judge_fallback={f['judge_fallback']}")
+            if f.get("judge_retry_attempted"):
+                tags.append("judge_retry")
+            if f.get("second_pass_attempted"):
+                status = "used" if f.get("second_pass_used") else "failed"
+                detail = f.get("second_pass_elapsed_seconds") or 0
+                attempts = f.get("second_pass_poll_attempts")
+                if attempts is not None:
+                    tags.append(f"second_pass={status}:{attempts} polls/{detail}s")
+                else:
+                    tags.append(f"second_pass={status}:{detail}s")
+            artifacts = f.get("artifacts") or {}
+            if artifacts.get("missing"):
+                tags.append(f"missing_artifacts={len(artifacts['missing'])}")
+            prefix = f" [{' / '.join(tags)}]" if tags else ""
+            lines.append(f"- `{f['bench']}/{f.get('qa_id', '?')}`{prefix} — {f.get('rationale', '')[:200]}")
         lines.append("")
 
     overall_pass = sum(s["passed"] for _, _, s in summaries)

@@ -17,14 +17,14 @@
       "dangerouslyDisableDeviceAuth": true
     },
     "mode": "local",
-    "port": 18790,
+    "port": 18789,
     "tailscale": {
       "mode": "off",
       "resetOnExit": false
     },
     "auth": {
       "mode": "token",
-      "token": "${GATEWAY_TOKEN}"
+      "token": "${OPENCLAW_GATEWAY_TOKEN}"
     }
   },
   "browser": {
@@ -187,11 +187,22 @@
   },
   "channels": {
     "feishu": {
-      "enabled": false,
+      "enabled": true,
       "domain": "feishu",
       "connectionMode": "websocket",
       "defaultAccount": "main",
-      "accounts": {},
+      "accounts": {
+        "main": {
+          "appId": "${FEISHU_APP_ID}",
+          "appSecret": "${FEISHU_APP_SECRET}",
+          "name": "Research Assistant",
+          "enabled": true
+        },
+        "default": {
+          "dmPolicy": "pairing",
+          "groupPolicy": "allowlist"
+        }
+      },
       "requireMention": true
     },
     "discord": {

@@ -16,6 +16,11 @@
       "const": "main",
       "description": "CI policy: MUST be the string `main`. All benchmark tasks go through the main agent."
     },
+    "target_agent": {
+      "type": "string",
+      "enum": ["autoresearch", "paper-review", "idea-generate", "reviewer"],
+      "description": "When agent is `main`, instructs the main agent to delegate to this sub-agent and return its final answer verbatim."
+    },
     "skill": {
       "type": "string",
       "description": "Optional capability or skill tag. Maps to SOUL.md sections or main agent skills."
@@ -38,7 +43,7 @@
     "expected_artifacts": {
       "type": "array",
       "items": {"type": "string"},
-      "description": "Glob paths under the agent workspace that should exist after the run (e.g. wiki/domains/foo/papers/bar.md)."
+      "description": "Glob paths under BENCH_MOUNT that are checked after the run. The literal <run> is replaced with BENCH_RUN_ID. Results are recorded in the report for diagnostics and do not affect the QA score."
     },
     "gold_answer": {
       "description": "Reference answer. Used by rule-based judge.",

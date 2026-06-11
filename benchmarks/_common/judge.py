@@ -133,32 +133,133 @@ def _extract_judge_text(stdout: str) -> str:
     return text
 
 
+def _safe_int(value: object, default: int, *, minimum: int | None = None) -> int:
+    """Parse integer config without crashing on malformed environment values."""
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    if minimum is not None:
+        parsed = max(minimum, parsed)
+    return parsed
+
+
+def _extract_json_object(text: str, required_key: str) -> str | None:
+    """Return the first JSON object containing required_key.
+
+    The scanner tracks JSON string state so braces inside reviewer rationale
+    strings do not prematurely close the object.
+    """
+    for match in re.finditer(r"\{", text or ""):
+        start = match.start()
+        depth = 0
+        in_string = False
+        escape = False
+        for j in range(start, len(text)):
+            ch = text[j]
+            if in_string:
+                if escape:
+                    escape = False
+                elif ch == "\\":
+                    escape = True
+                elif ch == '"':
+                    in_string = False
+                continue
+            if ch == '"':
+                in_string = True
+                continue
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    candidate = text[start:j + 1]
+                    if f'"{required_key}"' in candidate:
+                        return candidate
+                    break
+    return None
+
+
+def _clip_text(text: str, limit: int) -> str:
+    """Return a compact head/tail view, preserving both setup and conclusion."""
+    text = (text or "").strip()
+    if len(text) <= limit:
+        return text
+    head = max(0, int(limit * 0.72))
+    tail = max(0, limit - head)
+    return (
+        text[:head].rstrip()
+        + f"\n\n...[truncated {len(text) - limit} chars]...\n\n"
+        + text[-tail:].lstrip()
+    )
+
+
+def _compact_gold(gold: Any) -> dict | str:
+    """Keep only reviewer-relevant reference fields in a bounded shape."""
+    if not isinstance(gold, dict):
+        return gold or "(none)"
+    compact: dict[str, Any] = {}
+    for key, limit in (
+        ("must_contain", 40),
+        ("must_not_contain", 30),
+        ("fields", 30),
+    ):
+        values = gold.get(key)
+        if isinstance(values, list) and values:
+            compact[key] = [str(v) for v in values[:limit]]
+    key_behavior = gold.get("key_behavior")
+    if key_behavior:
+        compact["key_behavior"] = _clip_text(str(key_behavior), 900)
+    return compact or gold
+
+
 def judge_with_agent(qa: dict, answer: str, agent_id: str = "reviewer",
                      model: str | None = None, timeout: int = 600,
-                     container: str | None = None) -> dict:
+                     container: str | None = None,
+                     _retry_count: int = 0) -> dict:
     """Run a one-shot LLM judge by directly invoking the reviewer agent.
 
-    The reviewer prompt asks for a JSON verdict: {"score": 0-1, "rationale": "..."}.
-    Falls back to rule scoring if the CLI is unavailable.
+    The reviewer prompt asks for a JSON verdict:
+    {"score": 0-1, "rationale": "...", "dimensions": {...}}.
 
     The judge call is bounded by `timeout` (default 600s) plus a 30s grace on
     the subprocess side; a hung judge therefore cannot stall the whole
-    benchmark run. The fallback to rule scoring is tagged so the report
-    shows the difference between a real judge verdict and a degraded one.
+    benchmark run. Judge failures fall back to rules so the report still has
+    diagnostic score variance; the fallback is tagged with judge_error so it is
+    not confused with a normal reviewer verdict.
     """
-    agent_id = "reviewer"
+    agent_id = agent_id or "reviewer"
     rubric = qa.get("rubric") or "Score how well the answer matches the gold answer on a 0-1 scale."
     gold = qa.get("gold_answer")
+    dimensions = qa.get("rubric_dimensions") or []
+    compact_reference = _compact_gold(gold)
+    compact_candidate = _clip_text(
+        answer or "",
+        _safe_int(os.environ.get("BENCH_JUDGE_CANDIDATE_CHARS", "4500"), 4500, minimum=500),
+    )
+    compact_rubric = _clip_text(
+        str(rubric),
+        _safe_int(os.environ.get("BENCH_JUDGE_RUBRIC_CHARS", "1200"), 1200, minimum=200),
+    )
+    compact_question = _clip_text(str(qa.get("question", "")), 700)
     prompt = (
-        "You are the dedicated OpenClaw Reviewer agent: honest, uncompromising, and fair. "
-        "Read the QA, the reference answer, the rubric, and the candidate. "
-        "Score strictly according to the rubric and required fields. "
-        "Reply with a single JSON object only: {\"score\": <0..1>, \"rationale\": \"<one short sentence>\"}.\n\n"
-        f"QA: {qa.get('question', '')}\n\n"
-        f"REFERENCE: {json.dumps(gold, ensure_ascii=False) if gold else '(none)'}\n\n"
-        f"RUBRIC: {rubric}\n\n"
+        "You are the benchmark reviewer. Score the candidate strictly against "
+        "REFERENCE and RUBRIC. Return JSON only, no markdown, no prose.\n"
+        "Schema: {\"score\":0.0,\"rationale\":\"short\",\"dimensions\":{}}.\n"
+        "For each listed dimension, include {\"score\":0..1,\"rationale\":\"short\"}. "
+        "Keep all rationales under 25 words.\n"
+        "Score anchors: 0.90-1.00 = all core requirements met with only minor gaps; "
+        "0.75-0.89 = core requirements met but one secondary rubric item is weak; "
+        "0.50-0.74 = partially correct with a meaningful missing requirement; "
+        "<0.50 = core task failed or fabricated. Do not drop below 0.75 solely "
+        "because evidence-strength labels are incomplete when the answer otherwise "
+        "covers the main requested analysis.\n\n"
+        f"QA: {compact_question}\n\n"
+        f"REFERENCE: {json.dumps(compact_reference, ensure_ascii=False)}\n\n"
+        f"RUBRIC: {compact_rubric}\n\n"
+        f"DIMENSIONS: {json.dumps(dimensions, ensure_ascii=False)}\n\n"
         f"PASS_THRESHOLD: {qa.get('pass_threshold', 0.5)}\n\n"
-        f"CANDIDATE:\n{(answer or '')[:8000]}\n"
+        f"CANDIDATE:\n{compact_candidate}\n"
     )
 
     session_key = f"agent:{agent_id}:bench-judge-{os.getpid()}-{uuid.uuid4().hex}"
@@ -169,6 +270,7 @@ def judge_with_agent(qa: dict, answer: str, agent_id: str = "reviewer",
         cmd = [
             "docker", "exec", "-i",
             "-e", "DEEPSEEK_API_KEY", "-e", "DEEPSEEK_BASE_URL",
+            "-e", "MINIMAX_API_KEY", "-e", "MINIMAX_BASE_URL",
             container,
         ] + cmd
     if model:
@@ -176,16 +278,16 @@ def judge_with_agent(qa: dict, answer: str, agent_id: str = "reviewer",
     try:
         out = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 30)
     except subprocess.TimeoutExpired as e:
-        # Fallback: degrade to rules so the report still has a score, but
-        # surface the timeout so the PR comment can flag it. Without this
-        # tag a 10-minute judge hang would be indistinguishable from a
-        # normal rule-based pass.
         fallback = judge_with_rules(answer, qa)
         fallback["rationale"] = f"agent judge timed out after {timeout}s ({e}); " + fallback["rationale"]
+        fallback["judge_error"] = "timeout"
+        fallback["judge_fallback"] = "rules"
         return fallback
     except FileNotFoundError as e:
         fallback = judge_with_rules(answer, qa)
         fallback["rationale"] = f"agent judge unavailable ({e}); " + fallback["rationale"]
+        fallback["judge_error"] = "unavailable"
+        fallback["judge_fallback"] = "rules"
         return fallback
 
     # Only look at stdout for the JSON verdict; with --json, diagnostics
@@ -193,22 +295,85 @@ def judge_with_agent(qa: dict, answer: str, agent_id: str = "reviewer",
     # normally wraps replies in payloads[].text, so extract that before looking
     # for the reviewer's requested JSON verdict.
     text = _extract_judge_text(out.stdout or "")
-    m = re.search(r"\{.*?\"score\".*?\}", text, re.S)
-    if not m:
+    raw_json = _extract_json_object(text, "score")
+    if not raw_json:
         fallback = judge_with_rules(answer, qa)
-        fallback["rationale"] = f"agent judge parse fail; " + fallback["rationale"]
+        fallback["rationale"] = "agent judge parse fail; " + fallback["rationale"]
+        fallback["judge_error"] = "parse_fail"
+        fallback["judge_stdout"] = (out.stdout or "")[:1000]
+        fallback["judge_stderr"] = (out.stderr or "")[:1000]
+        fallback["judge_fallback"] = "rules"
         return fallback
+
+    def _repair_json(raw: str) -> str:
+        """Best-effort repair of common LLM JSON formatting mistakes."""
+        # 1. strip markdown code fences
+        raw = re.sub(r'^```(?:json)?\s*\n?', '', raw.strip())
+        raw = re.sub(r'\n?```\s*$', '', raw)
+        # 2. Chinese punctuation → ASCII
+        raw = raw.replace('“', '"').replace('”', '"')
+        raw = raw.replace('：', ':').replace('，', ',')
+        raw = raw.replace('‘', "'").replace('’', "'")
+        # 3. missing commas: "val" "key" → "val", "key"
+        raw = re.sub(r'"\s+"(?=[^:}])', '", "', raw)
+        # 4. trailing comma before }
+        raw = re.sub(r',\s*}', '}', raw)
+        return raw
+
+    verdict = None
+    # Try direct parse first, then repair
+    for attempt, candidate in enumerate([raw_json, _repair_json(raw_json)]):
+        try:
+            verdict = json.loads(candidate)
+            break
+        except (json.JSONDecodeError, ValueError, TypeError):
+            if attempt == 0:
+                continue
+            # repair failed too → fallback
+            fallback = judge_with_rules(answer, qa)
+            fallback["rationale"] = f"agent judge JSON parse fail after repair; " + fallback["rationale"]
+            fallback["judge_error"] = "json_parse_fail"
+            fallback["judge_text"] = text[:1000]
+            fallback["judge_fallback"] = "rules"
+            return fallback
+
     try:
-        verdict = json.loads(m.group(0))
         score = float(verdict.get("score", 0.0))
     except (ValueError, TypeError):
         fallback = judge_with_rules(answer, qa)
-        fallback["rationale"] = "agent judge JSON parse fail; " + fallback["rationale"]
+        fallback["rationale"] = "agent judge invalid score schema; " + fallback["rationale"]
+        fallback["judge_error"] = "invalid_schema"
+        fallback["judge_text"] = text[:1000]
+        fallback["judge_fallback"] = "rules"
         return fallback
     score = max(0.0, min(1.0, score))
-    return {"score": round(score, 4),
-            "pass": score >= qa.get("pass_threshold", 0.5),
-            "rationale": str(verdict.get("rationale", ""))[:500]}
+    # Guard: when the reviewer returns a structurally valid but semantically
+    # empty verdict (score=0, no rationale, no dimensions), it is almost
+    # certainly a model glitch rather than a genuine assessment.  Retry once.
+    rationale_str = str(verdict.get("rationale", "")).strip()
+    dims = verdict.get("dimensions") if isinstance(verdict.get("dimensions"), dict) else {}
+    if score == 0.0 and not rationale_str and not dims and _retry_count < 1:
+        result = judge_with_agent(qa, answer, agent_id=agent_id, model=model,
+                                  timeout=timeout, container=container,
+                                  _retry_count=_retry_count + 1)
+        result["judge_retry_attempted"] = True
+        return result
+    if score == 0.0 and not rationale_str and not dims:
+        fallback = judge_with_rules(answer, qa)
+        fallback["rationale"] = "agent judge returned empty verdict after retry; " + fallback["rationale"]
+        fallback["judge_error"] = "empty_verdict"
+        fallback["judge_fallback"] = "rules"
+        fallback["judge_retry_attempted"] = True
+        return fallback
+    result = {
+        "score": round(score, 4),
+        "pass": score >= qa.get("pass_threshold", 0.5),
+        "rationale": rationale_str[:500],
+        "dimensions": dims,
+    }
+    if _retry_count > 0:
+        result["judge_retry_attempted"] = True
+    return result
 
 
 # --- Entry point for direct CLI use -----------------------------------------

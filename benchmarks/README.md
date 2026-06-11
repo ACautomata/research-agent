@@ -11,8 +11,9 @@ benchmarks/
 ├── README.md                          # This file
 ├── _common/                           # Shared CI interface (do not put a benchmark here)
 │   ├── qa_schema.json                 # JSON Schema for qa.jsonl
-│   ├── env_setup.sh                   # Unified env: docker compose + health check
+│   ├── env_setup.sh                   # Unified env: boot container, health check (docker + container CLI)
 │   ├── run_bench.py                   # Generic driver; all metrics.py shim to this
+│   ├── run_local_benchmark.sh         # Local single-benchmark runner (docker or Apple container CLI)
 │   ├── judge.py                       # Reusable rule/agent judges
 │   └── report_pr.py                   # Aggregator + PR comment via `gh api`
 ├── idea-generate/                     # Benchmarks — each must have env.sh + metrics.py + qa.jsonl
@@ -33,9 +34,9 @@ benchmarks/
    When `judge: "agent"` is used, the reusable judge runs the dedicated `reviewer`
    agent for scoring.
 2. **Unified env first.** `benchmarks/_common/env_setup.sh` must run before any
-   benchmark's own `env.sh`. It pulls `justlikemaki/openclaw-docker-cn-im`,
-   brings up `docker-compose.bench.yml`, rsyncs the repo into the container at
-   `/home/node/.openclaw`, and waits for `openclaw health`.
+   benchmark's own `env.sh`. It boots a containerized OpenClaw environment
+   (Docker Compose by default, Apple `container` CLI as fallback), rsyncs the
+   repo into the container at `/home/node/.openclaw`, and waits for `openclaw health`.
 3. **QA schema.** Each `benchmarks/<name>/qa.jsonl` is one JSON per line, conformant
    with `benchmarks/_common/qa_schema.json`. Required: `qa_id`, `question`,
    `agent: "main"`. Optional but recommended: `target_agent`, `gold_answer`,

@@ -63,6 +63,7 @@ benchmarks/
 # 1) Prepare the .env (one-time)
 cp docker/.env.bench.example docker/.env.bench
 # then edit docker/.env.bench and set MINIMAX_API_KEY.
+# Optionally set MODEL_ID / PRIMARY_MODEL to use a different LLM.
 
 # 2) Run exactly one benchmark in the local containerized CI env.
 # Auto prefers a running Docker daemon, then falls back to Apple's `container` CLI.
@@ -71,6 +72,9 @@ benchmarks/_common/run_local_benchmark.sh idea-generate-1
 # Force a runtime when needed:
 benchmarks/_common/run_local_benchmark.sh --runtime docker idea-generate-1
 benchmarks/_common/run_local_benchmark.sh --runtime container idea-generate-1
+
+# Override model, base URL, or API key on the command line:
+benchmarks/_common/run_local_benchmark.sh --model gpt-4o --base-url https://api.openai.com/v1 --api-key sk-xxx idea-generate-1
 
 # Optional: keep the container around for inspection, or dump BENCH_DEBUG artifacts.
 benchmarks/_common/run_local_benchmark.sh --keep-container --debug paper-ingest

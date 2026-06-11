@@ -11,6 +11,9 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 RUNTIME="${BENCH_CONTAINER_RUNTIME:-auto}"
 KEEP_CONTAINER="${BENCH_KEEP_CONTAINER:-}"
 DEBUG="${BENCH_DEBUG:-}"
+CLI_MODEL=""
+CLI_BASE_URL=""
+CLI_API_KEY=""
 BENCH=""
 
 usage() {
@@ -24,12 +27,20 @@ Options:
   --runtime docker|container|auto  Container runtime to use (default: auto).
                                    auto prefers a running Docker daemon, then
                                    falls back to Apple's `container` CLI.
+  --model MODEL                    Override the LLM model (e.g. minimax/MiniMax-M2.7).
+                                   Default: read from docker/.env.bench or CI default.
+  --base-url URL                   Override the LLM provider base URL.
+                                   Default: read from docker/.env.bench or https://api.minimaxi.com.
+  --api-key KEY                    Override the LLM provider API key.
+                                   Default: read from docker/.env.bench or MINIMAX_API_KEY env var.
   --debug                          Enable BENCH_DEBUG=1 artifacts.
   --keep-container                 Do not tear down the benchmark container.
   -h, --help                       Show this help.
 
-Required credentials:
-  Export MINIMAX_API_KEY, or put it in docker/.env.bench.
+Credentials (in priority order):
+  1. --api-key / --base-url / --model CLI flags.
+  2. docker/.env.bench file (MINIMAX_API_KEY, MINIMAX_BASE_URL, MODEL_ID).
+  3. Environment variables (MINIMAX_API_KEY, MINIMAX_BASE_URL, BENCH_MODEL).
 USAGE
 }
 
@@ -42,6 +53,33 @@ while [[ $# -gt 0 ]]; do
       ;;
     --runtime=*)
       RUNTIME="${1#--runtime=}"
+      shift
+      ;;
+    --model)
+      [[ $# -ge 2 ]] || { echo "--model requires a value" >&2; exit 2; }
+      CLI_MODEL="$2"
+      shift 2
+      ;;
+    --model=*)
+      CLI_MODEL="${1#--model=}"
+      shift
+      ;;
+    --base-url)
+      [[ $# -ge 2 ]] || { echo "--base-url requires a value" >&2; exit 2; }
+      CLI_BASE_URL="$2"
+      shift 2
+      ;;
+    --base-url=*)
+      CLI_BASE_URL="${1#--base-url=}"
+      shift
+      ;;
+    --api-key)
+      [[ $# -ge 2 ]] || { echo "--api-key requires a value" >&2; exit 2; }
+      CLI_API_KEY="$2"
+      shift 2
+      ;;
+    --api-key=*)
+      CLI_API_KEY="${1#--api-key=}"
       shift
       ;;
     --debug)
@@ -95,9 +133,14 @@ if [[ -f "${LOCAL_ENV_FILE}" ]]; then
   set +a
 fi
 [[ -n "${MINIMAX_API_KEY:-}" ]] || {
-  echo "MINIMAX_API_KEY is not set. Export it or set it in docker/.env.bench." >&2
+  echo "MINIMAX_API_KEY is not set. Use --api-key, export it, or set it in docker/.env.bench." >&2
   exit 64
 }
+
+# CLI flags override .env.bench and environment variables.
+[[ -n "${CLI_API_KEY}" ]] && export MINIMAX_API_KEY="${CLI_API_KEY}"
+[[ -n "${CLI_BASE_URL}" ]] && export MINIMAX_BASE_URL="${CLI_BASE_URL}"
+[[ -n "${CLI_MODEL}" ]] && export BENCH_MODEL="${CLI_MODEL}"
 
 safe_bench="$(printf '%s' "${BENCH}" | tr -c 'A-Za-z0-9_.-' '-')"
 export BENCH_RUN_ID="${BENCH_RUN_ID:-local-${safe_bench}-$$}"

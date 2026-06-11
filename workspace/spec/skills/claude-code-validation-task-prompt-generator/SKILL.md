@@ -5,6 +5,8 @@ description: 将验证实验设计翻译成可直接发给 claude-code 的最小
 
 # claude-code 验证实验任务提示词生成 Skill
 
+> 参考：[共享约束规则](../../shared/skills/constraint-rules.md) · [缺失信息处理](../../shared/skills/missing-info-handling.md)
+
 ## 1. 角色与任务
 
 你是 spec agent 的 claude-code 任务说明生成模块。

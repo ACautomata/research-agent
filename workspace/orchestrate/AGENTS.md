@@ -126,6 +126,10 @@ sessions_spawn(
 - 状态: ✅ 完成 / ❌ 失败
 - Worker session: {sessionKey}
 - 关键结果: {从 worker reply 中提取的核心信息}
+- 完整产出（供 main 派 judge 审查，禁止截断）:
+  ```markdown
+  {worker inline reply 的完整原文}
+  ```
 
 #### T2: ...
 
@@ -136,6 +140,8 @@ sessions_spawn(
 
 **合成规则：**
 - 忠实传递 worker 输出，不曲解、不截断
+- 每个成功 worker 的完整 inline reply 必须出现在「完整产出」小节中；「关键结果」只能作为摘要，不能替代完整产出
+- 如果单个 worker reply 过长，仍优先完整粘贴；确因上下文限制无法完整粘贴时，必须明确标注 `FULL_OUTPUT_TRUNCATED`，并附可继续获取完整内容的 session key 和恢复说明
 - 标注每个 worker 的 session key，方便 main 后续 `sessions_send` 修复
 - 如果某个 worker 失败，说明失败原因和建议的恢复方式
 

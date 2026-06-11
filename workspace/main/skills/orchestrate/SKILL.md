@@ -89,12 +89,12 @@ sessions_spawn(
 
 Orchestrate 完成后返回结构化汇总报告，包含：
 - 执行摘要（总子任务数、成功/失败数）
-- 各子任务结果（worker、状态、关键发现）
+- 各子任务结果（worker、状态、关键发现、完整 inline reply 原文）
 - 建议的后续步骤
 
 ### Step 3: Judge 审查
 
-对 orchestrate 汇总中标记为成功的 worker 产出，按需派 `judge` 审查：
+对 orchestrate 汇总中标记为成功的 worker 产出，按需派 `judge` 审查。必须使用汇总报告中对应 worker 的完整 inline reply 原文，不要只传关键发现摘要：
 
 ```
 sessions_spawn(

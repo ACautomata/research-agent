@@ -37,10 +37,10 @@ Each stage follows the same pattern: spawn, wait, verify output, proceed.
 - Gate: Wiki page >= 100 lines, at least one numeric result
 
 **S2 — extract** | Timeout: 1800s (30 min)
-- `sessions_spawn(agentId: "extract", task: "对以下论文执行实验深度提取（S2）。标题：{title}。Wiki页面：{page_id}（使用 wiki_get 读取）。使用 paper-experiment-deep-extractor skill。在 reply 中直接返回完整 11 节实验提取文档。", mode: "run", runTimeoutSeconds: 1800)`
+- `sessions_spawn(agentId: "extract", task: "对以下论文执行实验深度提取（S2）。标题：{title}。Wiki页面：{page_id}（使用 wiki_get 读取）。使用 paper-experiment-deep-extractor skill。在 reply 中直接返回完整 12 节实验提取文档（## 0–## 11）。", mode: "run", runTimeoutSeconds: 1800)`
 - Input: Wiki path from S1, PDF as fallback
-- Output: Inline reply containing full 11-section experiment extraction
-- Gate: Reply contains all 11 sections per extract skill template
+- Output: Inline reply containing full 12-section experiment extraction
+- Gate: Reply contains all 12 sections (## 0–## 11) per extract skill template
 
 **S3 — critic** | Timeout: 1200s (20 min)
 - `sessions_spawn(agentId: "critic", task: "对以下论文执行审稿式问题分析（S3）。标题：{title}。Wiki页面：{page_id}（使用 wiki_get 读取）。S2 实验提取文档如下（从上游 agent 的 reply 中传递）：\n{S2 reply content}", mode: "run", runTimeoutSeconds: 1200)`
@@ -49,10 +49,10 @@ Each stage follows the same pattern: spawn, wait, verify output, proceed.
 - Gate: >= 1 concrete problem with evidence traceability
 
 **S4 — design** | Timeout: 1200s (20 min)
-- `sessions_spawn(agentId: "design", task: "对以下论文执行验证实验设计（S4）。标题：{title}。Wiki页面：{page_id}（使用 wiki_get 读取）。S3 问题分析文档如下（从上游 agent 的 reply 中传递）：\n{S3 reply content}", mode: "run", runTimeoutSeconds: 1200)`
+- `sessions_spawn(agentId: "design", task: "对以下论文执行验证实验设计（S4）。标题：{title}。Wiki页面：{page_id}（使用 wiki_get 读取）。S3 问题分析文档如下（从上游 agent 的 reply 中传递）：\n{S3 reply content}。在 reply 中直接返回完整 10 节验证实验设计文档（## 0–## 9）", mode: "run", runTimeoutSeconds: 1200)`
 - Input: Wiki path, S3 problem doc (inline)
 - Output: Inline reply containing full validation experiment design
-- Gate: Each experiment maps to an S3 problem with expected results
+- Gate: Reply contains all 10 sections (## 0–## 9) per design skill template; each experiment maps to an S3 problem with expected results
 
 **S5 — spec** | Timeout: 600s (10 min)
 - `sessions_spawn(agentId: "spec", task: "生成 claude-code 任务提示词（S5）。代码仓库：{repo, optional}。S3 问题分析：\n{S3 reply content}\n\nS4 验证设计：\n{S4 reply content}", mode: "run", runTimeoutSeconds: 600)`
@@ -69,7 +69,7 @@ Each stage follows the same pattern: spawn, wait, verify output, proceed.
 ### Error Handling
 
 - **Stage fails**: Log failure, inform user with stage + error detail. Offer retry or checkpoint resume.
-- **Checkpoint resume**: Record completed stages. Pass completed output content inline and resume from failed stage.
+- **Checkpoint resume**: Record completed stages **with the full inline Markdown content for each completed stage**, not only summaries or session keys. Store this checkpoint in the main session/memory or a wiki note that can be retrieved after the original session ends. When `Start stage` is S3 or later, verify that every prerequisite stage's full content is available; if any required upstream content is missing, ask the user to provide it or rerun the missing stage before continuing. Pass recovered completed output content inline and resume from the requested stage.
 - **Quality gate failure**: Re-spawn same agent with previous output attached + fix instructions. One retry per stage max.
 
 ## 输入规范 / Input Specification
@@ -89,9 +89,9 @@ Each stage returns its full output as inline reply text (Markdown). The orchestr
 | Stage | Agent | Content |
 |-------|-------|---------|
 | S1 | ingest | Wiki page path, evidence_level |
-| S2 | extract | Structured experiment extraction (11-section Markdown) |
+| S2 | extract | Structured experiment extraction (12-section Markdown) |
 | S3 | critic | Prioritized problem and claim analysis (7-section Markdown) |
-| S4 | design | Validation experiment designs (9-section Markdown) |
+| S4 | design | Validation experiment designs (10-section Markdown) |
 | S5 | spec | Ready-to-use claude-code task prompt (Markdown) |
 | S6 | audit | Cross-stage quality audit report (Markdown) |
 
@@ -109,4 +109,4 @@ User: "帮我完整分析这篇论文 /Users/papers/attention.pdf"
 
 User: "从S3继续分析 attention-is-all-you-need"
 
-1. Verify S2 output from previous session. 2. Spawn **critic** (S3) with wiki + S2 content. 3. Continue S4-S6 normally.
+1. Retrieve the checkpoint containing the full S2 inline Markdown (not just a summary or session key). 2. If full S2 content is missing, ask the user to paste it or rerun S2. 3. Spawn **critic** (S3) with wiki + full S2 content inline. 4. Continue S4-S6 normally, recording each full stage reply in the checkpoint.

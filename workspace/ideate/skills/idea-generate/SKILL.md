@@ -58,8 +58,8 @@ Use this workflow for the minimum runnable path. Internal scripts may write inte
 4. Create a temp run directory for script intermediates (e.g., `idea-runs/YYYYMMDD-HHMMSS-<topic-slug>/`).
 5. Run `scripts/build_paper_context_pack.py` to extract paper text and limitation/future-work snippets when papers are available.
 6. Read the generated `paper-context.md` and `paper-context.json` if they exist.
-7. As the agent, produce the paper analysis (paper-by-paper summary, cross-paper findings, limitations/gaps, transferable insights, constraints).
-8. As the agent, produce 5-10 candidate Idea Cards (draft-ideas.json) based on paper limitations, future work, contradictions/gaps, transferable insights, experiment results, user preferences.
+7. As the agent, write `paper-analysis.md` with paper-by-paper summary, cross-paper findings, limitations/gaps, transferable insights, and constraints (needed by step 12's `--analysis` flag).
+8. As the agent, write `draft-ideas.json` with 5-10 candidate Idea Cards (needed by steps 9-10 scripts).
 9. Run `scripts/idea_dedup.py`.
 10. Run `scripts/validate_idea_cards.py`.
 11. Fix any validation errors.
@@ -107,7 +107,7 @@ Read only the files needed for the current request, in this order:
 2. `paper/` folder via `scripts/build_paper_context_pack.py`, if present.
 3. Generated `paper-context.md`, if present.
 4. Relevant wiki pages (via `wiki_get` / `wiki_search`), starting from the wiki index when available.
-5. Relevant `/workspace/shared/paper-review-outputs/` outputs, if the task depends on reviewed papers or extracted experiments.
+5. Relevant reviewed papers or extracted experiments from wiki (use `wiki_search`/`wiki_get`).
 6. Experiment logs, result tables, ablations, failed attempts, or qualitative observations.
 7. Relevant `memory/` or `MEMORY.md` entries for recent discussion and failures, if present.
 8. Repo files needed to understand the baseline or implementation scope, if needed.
@@ -119,7 +119,7 @@ Do not bulk-load the entire wiki.
 1. Build the `Idea Generation Brief`
 2. Build a compact context digest when the task uses workspace context beyond papers.
 3. Build paper context from `paper/` when available.
-4. Write `paper-analysis.md` before drafting ideas.
+4. Write `paper-analysis.md` and `draft-ideas.json` before running dedup/validate scripts.
 5. Group evidence into candidate opportunity buckets:
    - literature gaps
    - contradictory findings

@@ -18,7 +18,7 @@
 
 必需输入：
 - 论文基础 Wiki 文档（通过 wiki 工具或路径获取）
-- S3 问题分析文档（`*-problem.md`）
+- S3 问题分析文档（来自 critic 的 inline reply，由调用者在 task 中传递）
 
 缺失时：Wiki 缺失则告知 main agent；S3 产出缺失则无法执行，需先完成问题分析。
 

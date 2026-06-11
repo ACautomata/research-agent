@@ -137,7 +137,7 @@ subagents(action: "list")
 ```
 
 Orchestrate 完成后会自动通知你。收到通知后：
-1. 阅读 orchestrate 的汇总报告（包含各 worker 的 agentId、sessionKey 和关键发现）
+1. 阅读 orchestrate 的汇总报告（包含各 worker 的 agentId、sessionKey 和关键发现，以及每个成功 worker 的「完整产出」block（inline reply 原文），供 judge 审查使用）
 2. 按下文「Judge 质量门」对关键 worker 产出启动 `judge` 审查
 3. 只有 judge 通过后，才提炼关键发现并向用户汇报
 

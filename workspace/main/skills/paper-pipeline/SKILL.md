@@ -90,7 +90,7 @@ Each stage returns its full output as inline reply text (Markdown). The orchestr
 |-------|-------|---------|
 | S1 | ingest | Wiki page path, evidence_level |
 | S2 | extract | Structured experiment extraction (12-section Markdown) |
-| S3 | critic | Prioritized problem and claim analysis (7-section Markdown) |
+| S3 | critic | Prioritized problem and claim analysis (8-section Markdown) |
 | S4 | design | Validation experiment designs (10-section Markdown) |
 | S5 | spec | Ready-to-use claude-code task prompt (Markdown) |
 | S6 | audit | Cross-stage quality audit report (Markdown) |

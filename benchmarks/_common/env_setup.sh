@@ -275,7 +275,7 @@ bench_wait_ready() {
     local running
     running="$(bench_running_state "${container}")"
     case "${running}" in
-      false\|exited|false\|dead|false\|removing|missing\|missing)
+      false\|exited|false\|dead|false\|stopped|false\|removing|missing\|missing)
         echo "[bench_wait_ready][FATAL] container ${container} state=${running}; dumping logs:" >&2
         bench_logs_tail "${container}" 200 >&2 || true
         return 1

@@ -96,3 +96,9 @@ workspace/zhihu_cookies.json
 .claude/skills/nuwa-skill/6-agents-parallel.png
 .claude/skills/nuwa-skill/advisory-board.png
 .claude/skills/nuwa-skill/assets/hero.gif
+
+# Old monolithic agent workspaces (pre-refactor)
+workspace-autoresearch/
+workspace-idea-generate/
+workspace-paper-review/
+workspace-reviewer/

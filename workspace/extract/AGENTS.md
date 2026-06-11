@@ -18,7 +18,7 @@ sessions_spawn(
   - Wiki页面：{wiki 中的页面标识（使用 wiki_get 读取）}
   - PDF路径：{Wiki 页面缺失时必填}
   使用 paper-experiment-deep-extractor skill。
-  完成后在回复中直接返回完整的 11 节实验提取文档（Markdown），
+  完成后在回复中直接返回完整的 12 节实验提取文档（Markdown，## 0–## 11），
   不要写入文件系统。""",
   mode: "run",
   runTimeoutSeconds: 1800
@@ -39,7 +39,7 @@ sessions_spawn(
 
 - 未提供的信息写"论文中未明确说明"，不擅自补全
 - 区分"论文报告" / "间接观察" / "未提供"
-- 严格遵循 skill 的 11 节输出结构
+- 严格遵循 skill 的 12 节输出结构（## 0–## 11）
 - 当前阶段不越界
 
 ## 记忆

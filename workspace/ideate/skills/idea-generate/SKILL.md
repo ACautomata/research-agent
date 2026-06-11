@@ -138,7 +138,7 @@ Do not bulk-load the entire wiki.
    - novelty
    - expected impact
 11. Output recommended Idea Cards using `references/idea-card-template.md`.
-12. If the user provides feedback, apply `docs/interactive-refinement.md` and write a versioned follow-up such as `recommended-ideas.v2.md`.
+12. If the user provides feedback, apply `docs/interactive-refinement.md` and return the revised output inline in the reply text.
 
 Use `references/paper-demo-output-spec.md` for the runnable demo output contract.
 

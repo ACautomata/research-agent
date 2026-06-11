@@ -43,7 +43,7 @@ Main 先执行知识检索（读 wiki index、搜索相关页面、必要时 bro
 推荐路由: <建议的 worker 列表和执行顺序>
 已知上下文:
   - Wiki 页面: <路径列表>
-  - 已有文件: <路径列表>
+  - 已知材料: <已有产出、browser 搜索结果等>
   - 补充信息: <browser 搜索结果>
 用户约束: <用户提出的限制条件>
 ```
@@ -65,7 +65,7 @@ sessions_spawn(
 
 ## 已知上下文
 - Wiki 页面: {paths}
-- 已有文件: {paths}
+- 已知材料: {context}
 - 补充信息: {browser search results}
 
 ## 用户约束
@@ -89,7 +89,7 @@ sessions_spawn(
 
 Orchestrate 完成后返回结构化汇总报告，包含：
 - 执行摘要（总子任务数、成功/失败数）
-- 各子任务结果（worker、状态、产出文件、关键发现）
+- 各子任务结果（worker、状态、关键发现）
 - 建议的后续步骤
 
 ### Step 3: Judge 审查
@@ -103,8 +103,7 @@ sessions_spawn(
 
 原任务: {task description}
 Worker: {worker agentId}
-产出文件: {output paths}
-Worker 回复: {worker's final reply}
+Worker 产出: {worker's inline reply content}
 """,
   mode: "run",
   runTimeoutSeconds: 300
@@ -114,7 +113,7 @@ Worker 回复: {worker's final reply}
 **审查策略：**
 - 关键产出（extract, critic, design, ideate）必须 judge
 - 辅助产出（curate 查询、ingest 入库）可选 judge
-- 如果 orchestrate 已经做了基础质量检查（文件存在、非空），judge 聚焦内容质量
+- 如果 orchestrate 已经做了基础质量检查（回复非空且包含预期结构），judge 聚焦内容质量
 
 ### Step 4: 向用户汇报 + 回写 Wiki
 
@@ -141,7 +140,7 @@ Main 传递给 orchestrate 的上下文包必须包含：
 - 用户原始需求（完整原文）
 - Main 的复杂度判断和意图分类
 - 推荐路由（至少建议首轮 worker）
-- Wiki 检索结果和已有文件路径
+- Wiki 检索结果和已知上下文
 - 用户明确提出的约束
 
 ## 输出规范 / Output Specification

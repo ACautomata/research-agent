@@ -132,15 +132,15 @@ if [[ -f "${LOCAL_ENV_FILE}" ]]; then
   . "${LOCAL_ENV_FILE}"
   set +a
 fi
-[[ -n "${MINIMAX_API_KEY:-}" ]] || {
-  echo "MINIMAX_API_KEY is not set. Use --api-key, export it, or set it in docker/.env.bench." >&2
-  exit 64
-}
-
 # CLI flags override .env.bench and environment variables.
 [[ -n "${CLI_API_KEY}" ]] && export MINIMAX_API_KEY="${CLI_API_KEY}"
 [[ -n "${CLI_BASE_URL}" ]] && export MINIMAX_BASE_URL="${CLI_BASE_URL}"
 [[ -n "${CLI_MODEL}" ]] && export BENCH_MODEL="${CLI_MODEL}"
+
+[[ -n "${MINIMAX_API_KEY:-}" ]] || {
+  echo "MINIMAX_API_KEY is not set. Use --api-key, export it, or set it in docker/.env.bench." >&2
+  exit 64
+}
 
 safe_bench="$(printf '%s' "${BENCH}" | tr -c 'A-Za-z0-9_.-' '-')"
 export BENCH_RUN_ID="${BENCH_RUN_ID:-local-${safe_bench}-$$}"

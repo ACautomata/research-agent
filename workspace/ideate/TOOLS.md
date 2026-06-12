@@ -5,7 +5,7 @@
 - `wiki_status` — confirm vault is reachable before anchored idea generation
 - `wiki_search` — find related papers, prior ideas, open questions for anchoring and deduplication
 - `wiki_get` — read a specific wiki page for concrete evidence grounding
-- `wiki_lint` — optional pre-flight check for contradictions or unresolved questions on anchor pages
+- `wiki_lint` — optional pre-flight check for contradictions or unresolved questions on anchor pages; run after `wiki_apply` writes to verify quality
 - `wiki_apply` — write back idea cards and cross-paper insights to wiki after generation
 
 > **Write-Back 原则**：读取 wiki 后产生的产出必须 write back，建立与读取内容的联系。

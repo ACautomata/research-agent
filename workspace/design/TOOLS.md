@@ -7,7 +7,7 @@
 - `wiki_status` — 确认 vault 在线且可读
 - `wiki_search` — 搜索论文条目、相关 claim、已有实验设计
 - `wiki_get` — 按 id/path 拉取单页详情
-- `wiki_lint` — 引用 wiki 前确认无 contradiction
+- `wiki_lint` — 引用 wiki 前确认无 contradiction；`wiki_apply` 写入后跑一次验证质量
 - `wiki_apply` — 完成实验设计后，将验证方案 write back 到论文 wiki 页面
 
 > **Write-Back 原则**：读取 wiki 后产生的产出必须 write back，建立与读取内容的联系。发现 wiki 缺失或错误时，同样通过 wiki_apply 修正。

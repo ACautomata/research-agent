@@ -5,7 +5,7 @@
 - `wiki_status` — 确认 vault 在线
 - `wiki_search` — 搜索论文条目、claim、实验设计
 - `wiki_get` — 按 id/path 拉取单页详情
-- `wiki_lint` — 检查 wiki 内容一致性
+- `wiki_lint` — 检查 wiki 内容一致性；`wiki_apply` 写入后跑一次验证质量
 - `wiki_apply` — 完成提示词生成后，将任务提示词归档到论文 wiki 页面
 
 > **Write-Back 原则**：读取 wiki 后产生的产出必须 write back，建立与读取内容的联系。

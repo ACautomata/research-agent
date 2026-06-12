@@ -21,7 +21,7 @@
 - `wiki_status` — 确认 vault 在线且可读。
 - `wiki_search` — 搜既有论文条目 / 相关 claim，用于比对上游引用是否与 wiki 一致。
 - `wiki_get` — 按 id/path 拉单页详情，用于核验上游 S2–S5 引用的事实是否准确。
-- `wiki_lint` — 引用 wiki 内容前如果担心 provenance，跑一次确认没有 contradiction 或 open question 影响上游结论。
+- `wiki_lint` — 引用 wiki 内容前如果担心 provenance，跑一次确认没有 contradiction 或 open question 影响上游结论；`wiki_apply` 写入后跑一次验证质量。
 - `wiki_apply` — 审计完成后，将审计结论和关键发现 write back 到论文 wiki 页面。
 
 > **Write-Back 原则**：读取 wiki 后产生的产出必须 write back，建立与读取内容的联系。发现 wiki 缺条目或需要更新时，通过 wiki_apply 直接修正。

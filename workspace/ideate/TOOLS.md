@@ -8,7 +8,7 @@
 - `wiki_lint` — optional pre-flight check for contradictions or unresolved questions on anchor pages
 - `wiki_apply` — write back idea cards and cross-paper insights to wiki after generation
 
-> **Write-Back Principle**: Any agent that reads wiki must write back its wiki-derived output, establishing a connection with the read content.
+> **Write-Back 原则**：读取 wiki 后产生的产出必须 write back，建立与读取内容的联系。
 
 ## File Operations
 

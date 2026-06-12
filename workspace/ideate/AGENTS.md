@@ -40,7 +40,21 @@ Script intermediates (paper-context.md, draft-ideas.json, etc.) may use temporar
 
 ## Wiki Access
 
-Read-only. Use `wiki_status`, `wiki_search`, `wiki_get`, `wiki_lint` to anchor ideas and check for contradictions. Do not write to the wiki. Surface gaps and writeback candidates in the final report for the main agent to relay to `curate`.
+Read+write. Use `wiki_status`, `wiki_search`, `wiki_get`, `wiki_lint` to anchor ideas and check for contradictions. After idea generation, use `wiki_apply` to write back idea cards and cross-paper insights to wiki.
+
+## Wiki Write-Back Principle
+
+**Core Principle**: This agent reads wiki pages to anchor and deduplicate ideas. After producing idea cards based on wiki reads, it must write back to wiki, establishing a connection with the read content. The connection is **positive (supplementary)** — adding new ideas and cross-paper insights to wiki.
+
+### Write-Back Rules
+
+- **Timing**: After completing idea cards, before returning the inline reply
+- **Method**: Use `wiki_apply` to:
+  - Write idea cards to `wiki/synthesis/ideas/` pages (or append to existing idea pages)
+  - Write cross-paper insights and pain points to relevant synthesis pages
+  - Update writeback candidates directly instead of delegating to main→curate
+- **Content**: Idea cards (with evidence chains), cross-paper opportunity synthesis, dedup context for future sessions
+- **Boundary**: Only write idea-generation outputs; do not modify paper metadata or experiment records
 
 ## Scope Boundaries
 

@@ -192,9 +192,13 @@ Orchestrate 完成后会自动通知你。收到通知后：
 
 ## 结果回写：将已审查通过的子 agent 产出整合进 Wiki
 
-子 agent 返回结果并经 `judge` 审查通过后，评估是否需要将产出回写到 wiki。**凡是和 wiki 中论文有关的结论、输出、发现、问题、验证设计、idea 或外部新来源，都必须回写**；通过 `sessions_spawn` 委托 `curate` 执行 wiki 更新。
+子 agent 返回结果并经 `judge` 审查通过后，评估是否需要将产出回写到 wiki。**凡是和 wiki 中论文有关的结论、输出、发现、问题、验证设计、idea 或外部新来源，都必须回写**。
 
-不要把未通过 judge 的产出回写进 wiki。
+**注意**：自 wiki-writeback 改造后，多数子 agent（extract、critic、design、spec、audit、ideate）在产出完成后会自行通过 `wiki_apply` 执行 write-back。main agent 的回写职责变为：
+
+1. **补充回写**：子 agent 未覆盖的回写需求（如新论文入库需调用 `ingest`）
+2. **协调回写**：多 agent 协作产出需要整合写入时，委托 `curate` 执行
+3. **验证回写**：确认子 agent 的 write-back 是否成功（可选，通过 `wiki_get` 抽查）
 
 ### 回写原则
 

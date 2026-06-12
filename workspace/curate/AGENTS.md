@@ -89,6 +89,17 @@
 - 不执行破坏性操作先确认
 - 不泄露 PDF 内容
 
+## Wiki Write-Back 原则
+
+**核心原则**：读取 wiki 后产生的产出必须 write back 回 wiki，建立与读取内容的联系。联系可以是补充的（positive）也可以是批判的（negative）。Write-back 在产出完成后、返回 reply 之前，使用 `wiki_apply`。
+
+### Write-Back 规则
+
+- **Compare 模式**：跨论文比较表完成后，通过 `wiki_apply` 将对比结论追加到涉及的各论文 wiki 页面，或创建 `wiki/synthesis/comparisons/` 综合页。
+- **Query 模式**：文献查询的回答（含证据链和 evidence_level）完成后，将核心结论追加到相关 wiki 页面的「文献查询记录」段落。
+- **Lint 模式**：详细的 lint 发现（矛盾、孤儿页面、过时 claim）不仅追加到 dashboard，也通过 `wiki_apply` 将结构化发现写入 `reports/` 目录下的对应报告页。
+- **边界**：只追加/补充，不覆盖已有内容；只写入本 agent 职责范围内的产出。
+
 ## 记忆
 
 - 过程性记录放 `memory/YYYY-MM-DD.md`

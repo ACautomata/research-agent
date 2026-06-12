@@ -236,11 +236,16 @@ bench_reapply_setup() {
   bench_container_cli exec "${container}" chown -R 1000:1000 /home/node/.openclaw || true
   echo "[bench_reapply_setup] patching openclaw.json (SecretRef)"
   bench_container_cli exec "${container}" python3 -c '
-import json, pathlib
+import json, os, pathlib
 p = pathlib.Path("/home/node/.openclaw/openclaw.json")
 data = json.loads(p.read_text(encoding="utf-8"))
 prov = data.setdefault("models", {}).setdefault("providers", {}).setdefault("minimax", {})
 prov["apiKey"] = {"source": "env", "provider": "default", "id": "MINIMAX_API_KEY"}
+custom_base = os.environ.get("MINIMAX_BASE_URL", "")
+default_base = "https://api.minimaxi.com/anthropic"
+if custom_base and custom_base != default_base:
+    prov["baseUrl"] = custom_base
+    print(f"patched models.providers.minimax.baseUrl -> {custom_base}")
 default_prov = data.get("models", {}).get("providers", {}).pop("default", None)
 if default_prov is not None:
     print("removed models.providers.default overlay (not needed for bench)")

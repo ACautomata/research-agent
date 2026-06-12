@@ -39,7 +39,7 @@ Main 先执行知识检索（读 wiki index、搜索相关页面、必要时 bro
 ```
 用户原始需求: <完整原文>
 复杂度: C2 / C3
-意图类型: 论文入库 / 论文分析 / idea 生成 / 文献查询 / 其他
+意图类型: 论文资料自动处理（默认） / 论文入库（仅） / 论文分析（已入库） / idea 生成 / 文献查询 / 其他
 推荐路由: <建议的 worker 列表和执行顺序>
 已知上下文:
   - Wiki 页面: <路径列表>
@@ -200,3 +200,19 @@ User: "帮我分别分析 attention.pdf 和 resnet.pdf 的实验设置"
 3. Orchestrate 拆解为 T1(extract: attention) 和 T2(extract: resnet)，并行派发。
 4. 两者完成后合成汇总返回 main。
 5. Main 审查、汇报。
+
+### Example 4: 论文资料自动处理（用户发送论文材料但未说触发词）
+
+User: "https://arxiv.org/abs/2401.01234 这篇论文关于对比学习"
+
+1. Main 检测到 arXiv URL 信号 → 自动判断为"论文资料自动处理"，复杂度=C3，路由=统一论文处理模式（full）。
+2. Main 执行 wiki 检索，确认未入库。
+3. Main 委托 orchestrate，传入意图=论文资料自动处理，mode=full。
+4. Orchestrate 拆解为 T1(ingest)→T2(curate lint)→T3(extract)→T4(critic)→T5(design)→T6(spec)→T7(audit)，串行派发。
+5. Orchestrate 返回汇总报告，含 7 个子任务结果和完整 inline reply。
+6. Main 派 judge 审查 S2-S5 关键产出，通过后向用户汇报。
+
+User: "只看摘要就行，帮我把这个入库 /papers/new.pdf"
+
+1. Main 检测到 PDF 路径+用户明确限定范围"只看摘要" → 意图=论文入库（仅），复杂度=C2，路由=ingest-only。
+2. Main 委托 orchestrate → T1(ingest)→T2(curate lint)，不衔接 pipeline。

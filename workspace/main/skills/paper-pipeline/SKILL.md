@@ -2,9 +2,15 @@
 
 ## 概述 / Overview
 
-End-to-end deep paper analysis and validation. Orchestrates 6 subagents in a strict linear chain from ingestion to quality audit.
+End-to-end deep paper analysis and validation. Orchestrates up to 7 subagents in a linear chain from ingestion to quality audit. Supports three execution modes:
 
-**Trigger words**: "完整分析", "full pipeline", "deep review", "S1-S6", "全流程分析", "paper pipeline", "端到端审稿"
+- **full（默认）**: S1(ingest) → S1b(curate lint) → S2(extract) → S3(critic) → S4(design) → S5(spec) → S6(audit) — 新论文入库+全流程分析
+- **post-ingest**: S2(extract) → S3(critic) → S4(design) → S5(spec) → S6(audit) — 跳过 S1，论文已在 wiki 中
+- **ingest-only**: S1(ingest) → curate (lint) — 仅创建 wiki 条目，不深入分析
+
+**Trigger words**: "完整分析", "full pipeline", "deep review", "S1-S6", "全流程分析", "paper pipeline", "端到端审稿", "分析这篇", "analyze this paper", "帮我看这篇论文"
+
+**Auto-trigger signals（无需关键词）**: 任何 PDF 路径、arxiv URL、论文标题+作者引用、或附带论文的 GitHub 仓库链接。检测到这些信号时，默认走 **full 模式**，除非用户明确限定范围。
 
 ## 应用场景 / Scenario
 
@@ -15,17 +21,26 @@ Deep paper analysis and validation. User provides a paper (PDF/URL) and receives
 | # | Agent | Stage | Role |
 |---|-------|-------|------|
 | 1 | **ingest** | S1 | Paper PDF ingestion, structured wiki page creation |
-| 2 | **extract** | S2 | Deep experiment extraction from paper text |
-| 3 | **critic** | S3 | Reviewer-perspective problem and claim analysis |
-| 4 | **design** | S4 | Validation experiment design for identified problems |
-| 5 | **spec** | S5 | Implementation spec and claude-code task prompt generation |
-| 6 | **audit** | S6 | Cross-stage quality auditing and consistency check |
+| 2 | **curate** | S1b | Quality lint on newly created wiki page（论文已存在时跳过） |
+| 3 | **extract** | S2 | Deep experiment extraction from paper text |
+| 4 | **critic** | S3 | Reviewer-perspective problem and claim analysis |
+| 5 | **design** | S4 | Validation experiment design for identified problems |
+| 6 | **spec** | S5 | Implementation spec and claude-code task prompt generation |
+| 7 | **audit** | S6 | Cross-stage quality auditing and consistency check |
 
 ## 编排步骤 / Orchestration Steps
 
-### Pre-pipeline
+### Pre-pipeline: Mode Detection
 
-Use `wiki_search` to check if paper entry exists. If found, note the page ID for downstream stages; otherwise ingest (S1) will create it.
+Before launching any stage, determine the execution mode:
+
+1. **Check wiki** using `wiki_search` for the paper (by title / arxiv ID / DOI)
+2. **Determine mode:**
+   - Paper **not in wiki** → default to `full` mode (S1 → S1b → S2 → S3 → S4 → S5 → S6)
+   - Paper **already in wiki** → default to `post-ingest` mode (S2 → S3 → S4 → S5 → S6)，告知用户 "这篇论文已入库，从实验提取开始分析"
+   - User **explicitly said** "入库" / "ingest only" / "只看摘要" / "大概看一眼" → `ingest-only` mode (S1 → curate)
+   - User **explicitly said** "不入库" / "skip wiki" / "只分析" → `post-ingest` mode
+3. **Record mode** in the task context passed to orchestrate
 
 ### Per-stage spawn pattern
 
@@ -35,6 +50,12 @@ Each stage follows the same pattern: spawn, wait, verify output, proceed.
 - `sessions_spawn(agentId: "ingest", task: "将以下论文入库。标题：{title}。PDF路径：{path}。按 Capture→Extract→Create Paper Page→Update Index 流程执行。", mode: "run", runTimeoutSeconds: 900)`
 - Output: Wiki page path, raw source path, evidence_level (inline reply)
 - Gate: Wiki page >= 100 lines, at least one numeric result
+
+**S1b — curate (post-ingest lint)** | Timeout: 600s (10 min)
+- **仅当 S1 创建了新 wiki 页面时执行**（论文已存在时跳过此阶段）
+- `sessions_spawn(agentId: "curate", task: "对新入库的论文页面执行质量检查。目标页面：{S1 output wiki path}。检查 frontmatter 完整性、evidence_level 准确性、Results 数值、孤立链接、index.md 条目正确性。输出 lint report。不修改 raw sources。", mode: "run", runTimeoutSeconds: 600)`
+- Output: Lint report (pass/fail, findings)
+- Gate: **非阻塞** — lint 发现的问题记录但不中断后续阶段。仅页面完全缺失时才 halt。
 
 **S2 — extract** | Timeout: 1800s (30 min)
 - `sessions_spawn(agentId: "extract", task: "对以下论文执行实验深度提取（S2）。标题：{title}。Wiki页面：{page_id}（使用 wiki_get 读取）。使用 paper-experiment-deep-extractor skill。在 reply 中直接返回完整 12 节实验提取文档（## 0–## 11）。", mode: "run", runTimeoutSeconds: 1800)`
@@ -69,6 +90,8 @@ Each stage follows the same pattern: spawn, wait, verify output, proceed.
 ### Error Handling
 
 - **Stage fails**: Log failure, inform user with stage + error detail. Offer retry or checkpoint resume.
+- **S1b (curate lint) issues**: Record findings, continue pipeline. Only halt if page is completely missing.
+- **S1→S2 chain broken**: If ingest failed but paper text is available (e.g., user pasted abstract), skip to S2 with available text.
 - **Checkpoint resume**: Record completed stages **with the full inline Markdown content for each completed stage**, not only summaries or session keys. Store this checkpoint in the main session/memory or a wiki note that can be retrieved after the original session ends. When `Start stage` is S3 or later, verify that every prerequisite stage's full content is available; if any required upstream content is missing, ask the user to provide it or rerun the missing stage before continuing. Pass recovered completed output content inline and resume from the requested stage.
 - **Quality gate failure**: Re-spawn same agent with previous output attached + fix instructions. One retry per stage max.
 
@@ -81,6 +104,7 @@ Each stage follows the same pattern: spawn, wait, verify output, proceed.
 | Code repo | No | Local path or remote URL |
 | User notes | No | Focus areas, constraints, questions |
 | Start stage | No | Default S1; set to "S3" etc. for checkpoint resume |
+| Execution mode | No | `full` (default) / `post-ingest` / `ingest-only`。由 mode detection 自动判定 |
 
 ## 输出规范 / Output Specification
 
@@ -89,6 +113,7 @@ Each stage returns its full output as inline reply text (Markdown). The orchestr
 | Stage | Agent | Content |
 |-------|-------|---------|
 | S1 | ingest | Wiki page path, evidence_level |
+| S1b | curate | Lint report (pass/fail, findings) |
 | S2 | extract | Structured experiment extraction (12-section Markdown) |
 | S3 | critic | Prioritized problem and claim analysis (8-section Markdown) |
 | S4 | design | Validation experiment designs (10-section Markdown) |
@@ -99,11 +124,17 @@ User receives: top 3 problems, priority validation experiments, audit verdict, n
 
 ## 示例 / Examples
 
-### Example 1: Full pipeline
+### Example 1: Full pipeline (auto-detected)
 
-User: "帮我完整分析这篇论文 /Users/papers/attention.pdf"
+User sends: "https://arxiv.org/abs/2401.01234 这篇论文关于对比学习"（无触发词）
 
-1. Check wiki: no entry. 2. Spawn **ingest** (S1). Wiki page created. 3. Spawn **extract** (S2). Receive full experiment extraction inline. 4. Spawn **critic** (S3) with S2 content embedded. 5. Spawn **design** (S4) with S3 content embedded. 6. Spawn **spec** (S5) with S3+S4 content embedded. 7. Spawn **audit** (S6) with S2-S5 content embedded. 8. Report summary.
+1. Main 检测到 arXiv URL 信号 → 自动判断为 full mode。2. Check wiki: no entry. 3. Spawn **ingest** (S1). Wiki page created. 4. Spawn **curate** (S1b). Lint passes. 5. Spawn **extract** (S2). Receive full experiment extraction inline. 6. Spawn **critic** (S3) with S2 content embedded. 7. Spawn **design** (S4) with S3 content embedded. 8. Spawn **spec** (S5) with S3+S4 content embedded. 9. Spawn **audit** (S6) with S2-S5 content embedded. 10. Report summary.
+
+### Example 1b: Paper already in wiki
+
+User sends: "帮我看下 Attention Is All You Need 的实验设计"
+
+1. Main detects paper reference. 2. Check wiki: entry exists at `wiki/papers/attention-is-all-you-need.md`. 3. Mode = `post-ingest`. 4. Tell user "这篇论文已入库，从实验提取开始分析". 5. Spawn **extract** (S2). Continue through S6.
 
 ### Example 2: Checkpoint resume
 

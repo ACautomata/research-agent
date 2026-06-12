@@ -2,7 +2,11 @@
 
 ## 概述 / Overview
 
-Two-stage pipeline to ingest a paper into the research wiki and verify quality: ingest creates the wiki page, curate lints for consistency. Trigger words: "入库", "ingest paper", "add to wiki", "文献笔记", "整理这篇论文".
+Two-stage pipeline to ingest a paper into the research wiki and verify quality: ingest creates the wiki page, curate lints for consistency.
+
+**When used standalone** (user explicitly limits scope): Trigger words: "入库", "ingest paper", "add to wiki", "文献笔记", "整理这篇论文".
+
+**When used as an auto-chain starter**: After successful ingest+curate, automatically chains into paper-pipeline S2-S6 for deep analysis — unless the user explicitly said "只看摘要" / "大概看一眼" / "只入库". This is the default behavior for all research materials without explicit scope limitation.
 
 ## 应用场景 / Scenario
 
@@ -69,10 +73,38 @@ sessions_spawn(
 
 Input: ingest inline reply. Output: lint report (pass/fail, findings). Timeout: 600s.
 
+### Step 2b: Auto-chain into paper-pipeline (conditional)
+
+After curate passes, check whether to auto-chain into the full paper analysis pipeline:
+
+**Auto-chain conditions（任一满足即自动衔接）:**
+- 原始任务上下文来自自动检测（用户未说触发词，只是发送了论文材料）
+- 任务上下文包含 `mode: "unified"` 或 `chain_to_pipeline: true`
+- 用户意图为"论文资料自动处理"
+
+**Standalone conditions（不衔接，仅入库）:**
+- 用户明确说 "入库" / "ingest only" / "只看摘要" / "大概看一眼" / "不要分析"
+- 任务上下文明确 `mode: "ingest-only"`
+- curate 发现 blocking issues 且 S1 需重做
+
+**If auto-chaining:**
+- DO NOT report ingest results to user yet
+- Proceed to spawn paper-pipeline S2-S6 stages (extract → critic → design → spec → audit)
+- Pass the wiki page path from S1 and the paper title as context
+- The final pipeline report will include all stages
+
+**If standalone:**
+- Proceed to Step 3 (report ingest results to user with suggestions for next steps)
+
 ### Step 3: Report to user
 
+**Standalone mode:**
 - **Curate passes**: Report wiki path, evidence_level, key metadata. Suggest next steps (paper-review, idea-generate, cross-paper compare).
 - **Curate finds blocking issues**: Report issues to user. Do not auto-re-spawn ingest.
+
+**Auto-chain mode（pipeline continues）:**
+- Record ingest results silently; the final pipeline report will include all stages.
+- Only report to user after the full pipeline (S2-S6) completes.
 
 ### Error handling
 
@@ -109,7 +141,13 @@ User receives:
 ## 示例 / Examples
 
 **Example 1**: User: "帮我把 /workspace/raw/sources/2024-01-15-mhkc.pdf 入库"
-→ Pre-check (not in wiki) → spawn ingest (1800s) → page created → spawn curate (600s) → 0 blocking, 1 suggestion → report success.
+→ 用户明确说"入库"，standalone mode。Pre-check (not in wiki) → spawn ingest (1800s) → page created → spawn curate (600s) → 0 blocking, 1 suggestion → report success, suggest next steps.
 
 **Example 2**: User: "入库 https://arxiv.org/abs/2401.01234，重点看实验设计"
-→ Pre-check → spawn ingest with user note → page created → spawn curate → report, suggest paper-review for deeper experiment analysis.
+→ 用户同时说了"入库"和"重点看"——完整入库后根据"重点看实验设计"衔接 pipeline。Pre-check → spawn ingest with user note → page created → spawn curate → auto-chain into S2(extract) with focus on experiment design → continue S3-S6.
+
+**Example 3**: User: "https://arxiv.org/abs/2401.01234 这篇论文怎么样"
+→ 用户未说触发词，自动检测 arXiv URL 信号 → auto-chain mode。Pre-check → spawn ingest → spawn curate → auto-chain into S2-S6。完整 pipeline 结束后统一汇报。
+
+**Example 4**: User: "只看摘要，帮我把这篇入库 /papers/new-paper.pdf"
+→ 用户明确说"只看摘要" → standalone mode (ingest-only)。不衔接 pipeline。

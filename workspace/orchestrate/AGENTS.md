@@ -147,11 +147,23 @@ sessions_spawn(
 
 ## 编排模式库
 
-### 模式 1: 串行流水线（paper-pipeline）
+### 模式 0: 统一论文处理（unified paper intake — 默认）
 
-适用：完整论文分析
+适用：用户发送任何论文材料（PDF/URL/标题引用）且未明确限定范围。这是推荐默认模式。
 ```
-T1(ingest) → T2(extract) → T3(critic) → T4(design) → T5(spec) → T6(audit)
+T1(ingest) → T2(curate: lint) → T3(extract) → T4(critic) → T5(design) → T6(spec) → T7(audit)
+```
+- 完整的 7 阶段串行链：入库 + 质量检查 + 全流程分析
+- T1 失败时整个链中断，向 main 报告原因并询问替代方案（如用户手动提供摘要文本）
+- T2 是非阻塞 lint：发现问题记录但不中断后续阶段
+- T3-T7 严格串行，每阶段依赖上游产出
+- 超时总计：900 + 600 + 1800 + 1200 + 1200 + 600 + 600 = 6900s（约 2h）。设置 orchestrate 总超时为 7200s
+
+### 模式 1: 跳过入库的分析链（post-ingest paper-pipeline）
+
+适用：完整论文分析，但论文已在 wiki 中或用户明确说"不入库只分析"
+```
+T1(extract) → T2(critic) → T3(design) → T4(spec) → T5(audit)
 ```
 
 ### 模式 2: 并行查询 + 串行生成（brainstorm）

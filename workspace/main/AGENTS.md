@@ -82,22 +82,51 @@ judge 审查                                             design
 
 **强制派发信号**：用户提供 PDF/URL/代码仓库、要求读论文正文、要求生成可保存产物、要求找研究问题/idea、需要最新网络检索、需要实验设计或 Codex 提示词。出现任一信号时，main agent 不要自己完成专业分析。
 
+**论文材料自动处理**：当用户提供任何可定位的论文材料（PDF 路径、arXiv URL、论文标题+作者引用、带论文的代码仓库），**自动执行完整流水线**（ingest → curate lint → extract → critic → design → spec → audit），不等待"入库"或"完整分析"等触发词。仅当用户明确限定范围（"只看摘要""只入库""不入库只分析"）时才遵循限定。
+
 ### 路由目标选择
 
 按以下规则判断路由目标：
 
+#### 科研资料自动检测
+
+当用户发送任何科研资料时，**不需要等待特定触发词**。自动识别以下信号并启动完整流程：
+
+| 信号类型 | 检测规则 | 示例 |
+|---------|---------|------|
+| PDF 文件 | 用户消息包含 `.pdf` 路径或 PDF 文件引用 | `/path/to/paper.pdf`、附件PDF |
+| arXiv 链接 | 包含 `arxiv.org/abs/` 或 `arxiv.org/pdf/` 的 URL | `https://arxiv.org/abs/2401.01234` |
+| 论文标题引用 | 用户引用带作者/年份/会议的论文 | "Attention Is All You Need (Vaswani et al., 2017)" |
+| 通用论文指示 | 用户提到"这篇论文""the paper""文章"且附带可定位信息 | "帮我看下这篇论文 https://..." |
+| 代码仓库+论文 | 用户提供代码仓库链接并提及相关论文 | "这是 XX 论文的代码 https://github.com/..." |
+
+**检测到任一信号时的默认行为：**
+- **默认执行完整流水线：** ingest (入库) → curate (lint) → extract (S2) → critic (S3) → design (S4) → spec (S5) → audit (S6)
+- **意图类型设为"论文资料自动处理"**，路由使用统一论文处理模式
+- **不追问用户选择模式**，除非用户明确表示仅需部分步骤
+
+**例外处理（用户明确限定范围时尊重用户）：**
+- 用户说"只看摘要" / "大概看一眼" → 仅 ingest + curate lint (C2)
+- 用户说"不入库，只分析" / "skip wiki" → 跳过 ingest，从 S2 开始
+- 用户说"只做实验提取" → 仅 extract (C2)
+- 用户说"更新已有论文的分析" → wiki 已存在 → 从 S2 开始
+
+#### 路由目标表
+
 | 用户意图 | 编排层 | Worker 链 | 编排 skill |
 |---------|--------|-----------|-----------|
-| 论文入库/Wiki | `orchestrate` | `ingest` → `curate` | `skills/orchestrate/` + `skills/paper-ingest/` |
-| 论文分析（实验提取、问题分析、验证设计、提示词） | `orchestrate` | `extract` → `critic` → `design` → `spec` | `skills/orchestrate/` + `skills/paper-pipeline/` |
+| **论文资料自动处理（默认）** | `orchestrate` | `ingest` → `curate` → `extract` → `critic` → `design` → `spec` → `audit` | `skills/orchestrate/` + `skills/paper-pipeline/`（full mode） |
+| 论文入库/Wiki（仅） | `orchestrate` | `ingest` → `curate` | `skills/orchestrate/` + `skills/paper-ingest/` |
+| 论文分析（已入库） | `orchestrate` | `extract` → `critic` → `design` → `spec` | `skills/orchestrate/` + `skills/paper-pipeline/`（post-ingest mode） |
 | 科研 idea 生成 | `orchestrate` | `curate` → `ideate` | `skills/orchestrate/` + `skills/brainstorm/` |
 | 流程产出质量审计 | `orchestrate` | `audit` | `skills/orchestrate/` |
 | benchmark 候选评分 | main 直接 | `judge` | `skills/benchmark/` |
 | 文献查询 | C0/C1 直接答；C2+ `orchestrate` | `curate` | `skills/orchestrate/` |
 
-如果意图模糊无法判断：
-- 追问用户："是要完整审稿分析、整理 Wiki 入库、还是生成研究 idea？"
-- 不要自己猜测后直接执行
+如果意图模糊，按以下优先级判断：
+1. **检测到科研资料信号** → 默认执行完整流水线（入库 + S2-S6 分析），不追问
+2. **仅提到领域/主题/关键词（无具体论文）** → 属于文献查询或 idea 生成场景，按对应路由
+3. **完全无法判断** → 追问用户确认意图
 
 **路由判断完成后、实际委托之前**，先执行下文的「知识检索」步骤，查完本地 wiki 再决定传递什么上下文给子 agent。
 
@@ -234,6 +263,7 @@ Orchestrate 完成后会自动通知你。收到通知后：
 **不过度询问**
 - 用户给的信息足够就接，不要反复追问
 - 只有信息确实不足以启动子 agent 时才追问
+- **论文材料自动处理：** 用户发送论文材料时默认走完整流水线，不追问"你是要入库还是完整分析"
 
 ---
 

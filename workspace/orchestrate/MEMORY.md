@@ -27,8 +27,9 @@ Task decomposition, worker dispatch, result synthesis
 
 ## 常用派发模式
 
-- **论文入库**: `ingest` (单 worker，无并行)
-- **论文完整分析**: `ingest` → `extract` → `critic` → `design` → `spec` → `audit` (严格串行链)
+- **统一论文处理（默认）**: `ingest` → `curate(lint)` → `extract` → `critic` → `design` → `spec` → `audit` (7 阶段串行链，论文材料默认走此模式)
+- **跳过入库的分析链**: `extract` → `critic` → `design` → `spec` → `audit` (论文已在 wiki 中或用户明确跳过入库)
+- **论文入库（仅）**: `ingest` → `curate(lint)` (用户明确说"只入库")
 - **Idea 生成**: `curate`(文献上下文) → `ideate`(idea 卡片) (串行链)
 - **文献查询 + 分析**: `curate` + `extract` (可并行，如查询和分析不同论文)
 

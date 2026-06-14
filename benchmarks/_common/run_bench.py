@@ -112,7 +112,7 @@ def _debug_banner(bench: str) -> None:
     if not DEBUG:
         return
     artifacts = Path(os.environ.get("BENCH_DEBUG_DIR", ROOT / "bench-debug")) / bench
-    print(f"[DEBUG] BENCH_DEBUG=1 — full raw artifacts per QA will be written to "
+    print(f"[DEBUG] BENCH_DEBUG=1 �?full raw artifacts per QA will be written to "
           f"{artifacts.resolve()}", file=sys.stderr)
 
 
@@ -145,7 +145,7 @@ def _agent_id_from_session_key(session_key: str) -> str:
         return parts[sub_idx + 1]
     except (ValueError, IndexError):
         pass
-    # Not a subagent key — the agent id is the second token.
+    # Not a subagent key �?the agent id is the second token.
     if len(parts) >= 2:
         return parts[1]
     return "main"
@@ -190,7 +190,7 @@ def _print_session_summary(session_path: str, label: str) -> None:
     """Print the **complete** session transcript in CI logs.
 
     Output is wrapped in a GitHub Actions ``::group::`` block.  The full raw
-    JSONL content is printed — no truncation — so that every tool call, tool
+    JSONL content is printed �?no truncation �?so that every tool call, tool
     result, and model turn is visible in the CI DEBUG logs.
     """
     print(f"::group::📋 Session: {label}")
@@ -249,7 +249,7 @@ def _print_session_summary(session_path: str, label: str) -> None:
         elif etype == "thinking_level_change":
             print(f"  [meta] thinking_level={evt.get('thinkingLevel', '?')}")
         elif etype == "model_change":
-            print(f"  [meta] model → {evt.get('model', '?')}")
+            print(f"  [meta] model �?{evt.get('model', '?')}")
 
     print(f"  ── {turn_count} message turns, {tool_count} tool calls ──")
     print("::endgroup::")
@@ -346,7 +346,7 @@ def _extract_qa_sessions(container: str, session_key: str,
                 child_key = parts[0].strip()
                 ws_dir = parts[1].strip() if len(parts) > 1 else ""
                 # workspace_dir is like /home/node/.openclaw/workspace/curate
-                # → agent sessions live at /home/node/.openclaw/agents/curate/sessions/
+                # �?agent sessions live at /home/node/.openclaw/agents/curate/sessions/
                 agent_id = "main"
                 if ws_dir:
                     ws_rel = ws_dir.replace(f"{_SESSION_MOUNT}/workspace/", "")
@@ -451,7 +451,7 @@ def _extract_qa_sessions(container: str, session_key: str,
         print(f"[sessions] no session JSONL files extracted for {session_key}", file=sys.stderr)
     else:
         print(f"[sessions] extracted {extracted} session JSONL(s) for {session_key} "
-              f"→ {sessions_out.resolve()}", file=sys.stderr)
+              f"�?{sessions_out.resolve()}", file=sys.stderr)
     return extracted
 
 
@@ -502,7 +502,7 @@ done
 
 def load_qa(path: Path) -> list[dict]:
     qas: list[dict] = []
-    for i, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+    for i, line in enumerate(path.read_text(encoding="utf-8-sig").splitlines(), 1):
         line = line.strip()
         if not line or line.startswith("#"):
             continue
@@ -653,17 +653,17 @@ _NOISE_PREFIXES = (
     "[loop]",
     "Config health-state write failed",
     "=== ",
-    "初始化",
+    "初始�?,
     "配置",
     "启动",
     "挂载",
-    "检测",
+    "检�?,
     "ℹ️",
-    "已",
+    "�?,
     "正在",
     "整体",
-    "上下文",
-    "最大",
+    "上下�?,
+    "最�?,
     "API",
     "Base",
     "Gateway",
@@ -672,7 +672,7 @@ _NOISE_PREFIXES = (
     "允许",
     "当前",
     "目标",
-    "开放",
+    "开�?,
 )
 
 # Regex matching a *whole* log/diagnostic line that has a `[tag]` prefix and
@@ -756,7 +756,7 @@ def _extract_agent_text(stdout: str, stderr: str) -> str:
        plugin fails, openclaw writes ~2kB of `[context-engine] ... [diagnostic] ...`
        noise to stderr and no real agent text appears.
     4. If after stripping nothing usable remains, return a sentinel
-       "(no agent response — only diagnostic output)" so downstream
+       "(no agent response �?only diagnostic output)" so downstream
        judges and the report get a clear signal instead of 2kB of noise.
     """
     if stdout.strip():
@@ -780,7 +780,7 @@ def _extract_agent_text(stdout: str, stderr: str) -> str:
     # Fallback: stderr.  Strip diagnostic noise and return what remains.
     cleaned_stderr = _strip_diagnostics(stderr)
     if not cleaned_stderr.strip():
-        return "(no agent response — only diagnostic output)"
+        return "(no agent response �?only diagnostic output)"
     return cleaned_stderr
 
 
@@ -936,7 +936,7 @@ def main(bench_name: str, agent_id: str | None = None) -> int:
                   f"pass={verdict.get('pass', False)} "
                   f"len(answer)={len(answer or '')} head={head!r}",
                   file=sys.stderr)
-            group_title = (f"QA {qa['qa_id']} — agent reply "
+            group_title = (f"QA {qa['qa_id']} �?agent reply "
                            f"(score={verdict.get('score', 0):.2f}, "
                            f"pass={verdict.get('pass', False)}, "
                            f"{len(answer or '')} chars)")

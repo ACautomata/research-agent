@@ -110,6 +110,53 @@ python3 benchmarks/idea-generate-1/metrics.py
 
 除非正在调试 benchmark 基础设施，否则优先使用 `run_local_benchmark.sh`。
 
+## 如何预烘焙 benchmark wiki fixture
+
+如果某个 benchmark 需要先把论文材料入库到 wiki，可以使用统一工具把 `materials/` 预烘焙成 `wiki/main/` fixture，避免每次 benchmark 运行时重复 ingest：
+
+```bash
+benchmarks/_common/bake_wiki.sh idea-generate-1
+```
+
+默认读取 `benchmarks/<benchmark>/materials/`，支持 `.md` / `.pdf` / `.txt` 论文材料，并把生成的 wiki vault 导出到：
+
+```text
+benchmarks/<benchmark>/wiki/main/
+```
+
+脚本还会默认给 `benchmarks/<benchmark>/env.sh` 写入一个受管理的 staging block。之后正常运行 benchmark 时，`env.sh` 会把预烘焙好的 `wiki/main/` 复制进 benchmark 容器：
+
+```bash
+benchmarks/_common/run_local_benchmark.sh idea-generate-1
+```
+
+常用命令：
+
+```bash
+# 使用默认材料目录 benchmarks/<bench>/materials
+benchmarks/_common/bake_wiki.sh idea-generate-1
+
+# 指定其他材料目录
+benchmarks/_common/bake_wiki.sh --materials path/to/papers idea-generate-1
+
+# 指定容器运行时并保留容器，方便排查
+benchmarks/_common/bake_wiki.sh --runtime docker --keep-container idea-generate-1
+
+# 只启动容器并 staging materials，不调用 agent、不导出 wiki
+benchmarks/_common/bake_wiki.sh --dry-run idea-generate-1
+
+# 不自动 patch env.sh
+benchmarks/_common/bake_wiki.sh --no-patch-envsh idea-generate-1
+```
+
+`bake_wiki.sh` 的 LLM 配置优先级与 `run_local_benchmark.sh` 一致：命令行 `--api-key` / `--base-url` / `--model` 最高，其次是 `docker/.env.bench`，最后是当前 shell 的 `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL`。
+
+烘焙完成后，建议检查并提交这些文件：
+
+1. `benchmarks/<benchmark>/materials/` 中的材料；
+2. `benchmarks/<benchmark>/wiki/main/` 中生成的 wiki fixture；
+3. `benchmarks/<benchmark>/env.sh` 中由 `bake_wiki.sh` 管理的 staging block。
+
 ## 如何在 forked repo 中配置 GitHub Secrets 跑 CI
 
 如果你 fork 了本仓库，并希望在自己的 fork 上打开 PR 前先跑 benchmark CI，需要在 fork 仓库里配置 GitHub Actions secrets。

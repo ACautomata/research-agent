@@ -238,7 +238,12 @@ bench_reapply_setup() {
   echo "[bench_reapply_setup] chown /home/node/.openclaw -> 1000:1000"
   bench_container_cli exec "${container}" chown -R 1000:1000 /home/node/.openclaw || true
   echo "[bench_reapply_setup] patching openclaw.json (SecretRef)"
-  bench_container_cli exec -e LLM_MODEL "${container}" python3 -c '
+  # Pass LLM_MODEL into the container. Honor the env_setup.sh default so an
+  # empty LLM_MODEL (e.g. when the CI secret isn't configured) still
+  # produces a valid provider/model, matching the comment at the top of
+  # this file: "LLM_MODEL -- optional, defaults to minimax/MiniMax-M2.7".
+  local llm_model="${LLM_MODEL:-minimax/MiniMax-M2.7}"
+  bench_container_cli exec -e "LLM_MODEL=${llm_model}" "${container}" python3 -c '
 import json, os, pathlib
 p = pathlib.Path("/home/node/.openclaw/openclaw.json")
 data = json.loads(p.read_text(encoding="utf-8"))

@@ -72,8 +72,8 @@
   {
     "skill": "paper-experiment-deep-extractor",
     "task_type": "experiment-extraction",
-    "input_material": "以下论文信息严重不完整，仅有一段摘要：\n\n## 论文摘要\n本文提出了一种基于边感知正则化的图神经网络训练方法（EdgeReg-GNN），在图节点分类任务上对 GCN 和 GAT 进行正则化增强。在 Cora 和 CiteSeer 数据集上分别取得 1-3% 的准确率提升。优化器使用 Adam，学习率 0.01。其他实验细节未提供。",
-    "question": "EdgeReg-GNN 我只能找到这点材料，帮我先只基于上面这段摘要把已有实验信息整理出来。缺什么也列给我，不用查外部资料。",
+    "input_material": "以下是我从组会记录里摘出来的一段实验摘要，信息还不完整：\n\n## 实验摘录\n我们组的边感知正则化 GNN 草稿，在图节点分类任务上对 GCN 和 GAT 做正则化增强。在 Cora 和 CiteSeer 数据集上分别取得 1-3% 的准确率提升。优化器使用 Adam，学习率 0.01。其他实验细节还没整理出来。",
+    "question": "我现在只有这段组会记录，帮我先把里面已有的实验事实整理出来，再列一份需要向作者确认的缺口清单。",
     "gold_answer": {
       "must_contain": [
         "Cora",
@@ -530,27 +530,25 @@
   {
     "skill": "paper-validation-experiment-designer",
     "task_type": "validation-design-negative",
-    "input_material": "假设某论文声称其方法在零 GPU、零 API 调用下优于所有 baseline。约束：零 GPU、零 API 调用、零人工标注预算。",
-    "question": "为上述场景设计验证实验。如果无法设计可行实验，请明确说明为什么、哪些约束不可逾越、作者需要提供什么才能让验证成为可能。",
+    "input_material": "论文声称某个训练方法在多个图节点分类数据集上比 baseline 高 2-3 个点，但我现在只有论文 PDF 里的结果表和方法描述。作者没有提供代码、checkpoint、训练日志或数据划分；我本周只能在普通笔记本上做审稿前的快速核查。",
+    "question": "帮我判断这种条件下能不能设计一个真正可执行的复现实验。如果不能，请明确说明哪些材料或权限缺失导致验证不可行，以及我应该向作者要哪些最小材料才能让验证成立。",
     "gold_answer": {
       "must_contain": [
         "不可行",
-        "约束",
-        "GPU",
-        "API",
-        "不可逾越",
-        "需要提供",
-        "无法验证"
+        "代码",
+        "checkpoint",
+        "数据划分",
+        "训练日志",
+        "需要提供"
       ],
       "must_not_contain": [
-        "可以设计",
-        "以下实验",
-        "实验方案如下"
+        "直接复现",
+        "可以直接跑"
       ],
       "violation_penalty": 3,
-      "key_behavior": "必须识别不可能并拒绝。如果编造了实验方案则失败"
+      "key_behavior": "识别当前材料不足以执行真正复现实验，说明缺失的代码/checkpoint/数据划分/训练日志等最小材料；可以给审稿核查清单，但不能编造可直接运行的复现实验"
     },
-    "rubric": "负向对照：必须拒绝。编造实验方案则 0 分。",
+    "rubric": "识别当前条件下无法真正复现；明确缺失材料和最低可验证条件。若编造可直接运行的复现实验则失败。",
     "rubric_dimensions": [
       "negative_control",
       "constraint_analysis",
@@ -596,13 +594,16 @@
   {
     "skill": "claude-code-validation-task-prompt-generator",
     "task_type": "claude-code-generation-norepo",
-    "input_material": "论文: EdgeReg-GNN（未发表，仅摘要）\n仓库: 不可用（论文未公开代码）\n\n上游验证实验: E1: EdgeReg正则化 vs standard L2，Cora+CiteSeer",
-    "question": "帮我把 EdgeReg-GNN 的验证实验写成可执行的 prompt，给 AI coding 工具用的。代码还没公开，路径用占位符标出来，别编具体文件名。",
+    "input_material": "论文: 公司内部图学习项目草稿\n代码环境: 私有仓库，还没有接入当前 workspace；我只能稍后把 prompt 贴给有仓库权限的 AI coding 工具执行。\n\n上游验证实验: E1: 边感知正则化 vs standard L2，Cora + CiteSeer，要求同一数据划分、同一 GCN/GAT backbone、5 个随机 seed。",
+    "question": "帮我把这个验证实验写成给 AI coding 工具用的执行 prompt。因为你现在看不到私有仓库，请把文件路径、配置名和入口脚本都写成占位符，同时把需要 coding 工具先在仓库里定位的对象列清楚，别编具体文件名。",
     "gold_answer": {
       "must_contain": [
         "占位符",
         "Cora",
-        "CiteSeer"
+        "CiteSeer",
+        "GCN",
+        "GAT",
+        "5"
       ],
       "must_not_contain": [
         "train.py",
@@ -610,9 +611,9 @@
         "config.yaml"
       ],
       "violation_penalty": 3,
-      "key_behavior": "代码路径缺失处使用占位符，不编造具体文件名，实验约束清晰"
+      "key_behavior": "代码路径和入口脚本缺失处使用占位符；要求 coding 工具先定位训练入口、模型定义、数据配置；实验约束和完成标准清晰，不编造具体文件名"
     },
-    "rubric": "代码路径缺失处用占位符，不臆造 train.py/model.py 等具体文件名。验证实验的约束和完成标准清晰。",
+    "rubric": "私有/未接入仓库场景下，代码路径和入口脚本必须用占位符；应要求 coding 工具先定位训练入口、模型定义、数据配置。不得臆造 train.py/model.py/config.yaml 等具体文件名。",
     "rubric_dimensions": [
       "code-prompt",
       "placeholder_usage",

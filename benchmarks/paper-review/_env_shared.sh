@@ -11,9 +11,18 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# When sourced from a shard (paper-review-N/env.sh), $HERE resolves
+# to the shard directory. Materials live under paper-review/, so pin
+# MATERIALS_ROOT to the parent regardless of who sources this file.
+MATERIALS_ROOT="${HERE}"
+if [[ ! -d "${MATERIALS_ROOT}/materials" ]]; then
+  MATERIALS_ROOT="$(cd "${HERE}/../paper-review" && pwd 2>/dev/null || echo "${HERE}")"
+fi
 log() { printf '\n[paper-review.env] %s\n' "$*"; }
 
-# Bring up a fresh container for this shard.
+# CI: the setup job tears down its container; each bench matrix job
+# runs on a different runner and MUST recreate the container.
+# Local: BENCH_ENV_FILE is unset; container already exists from env_setup.sh.
 if [[ -n "${BENCH_ENV_FILE:-}" && -f "${BENCH_ENV_FILE}" ]]; then
   # shellcheck disable=SC1090
   . "${BENCH_ENV_FILE}"
@@ -31,7 +40,7 @@ fi
 # openclaw.json configures memory-wiki vault at ~/.openclaw/wiki/main.
 # QA prompts reference wiki files via this vault path.
 WIKI_VAULT="${BENCH_MOUNT}/wiki/main"
-MATERIALS_SRC="${HERE}/materials"
+MATERIALS_SRC="${MATERIALS_ROOT}/materials"
 
 if [[ -d "${MATERIALS_SRC}" ]]; then
   log "staging wiki materials -> ${WIKI_VAULT}"
@@ -57,12 +66,34 @@ fi
 # QA prompts reference benchmarks/paper-review/materials/* paths.
 # OpenClaw tools resolve relative paths from the workspace root.
 log "linking repo benchmarks into workspace"
+
+# 2a. Symlink benchmarks/ into all workspace dirs (lightweight path access)
 bench_container_cli exec "${BENCH_CONTAINER}" bash -lc \
-  "for ws in workspace workspace/extract workspace/critic workspace/design workspace/spec workspace/audit; do
+  "for ws in workspace workspace/main workspace/extract workspace/critic workspace/design workspace/spec workspace/audit; do
      mkdir -p '${BENCH_MOUNT}/\${ws}'
      rm -f '${BENCH_MOUNT}/\${ws}/benchmarks'
      ln -s '${BENCH_MOUNT}/benchmarks' '${BENCH_MOUNT}/\${ws}/benchmarks'
-   done"
+   done" || log "WARNING: symlink step failed (non-fatal)"
+
+# 2b. For workspace/main, replace symlink with real material copies.
+# Symlinks trigger "escapes sandbox root" errors in the agent sandbox,
+# so we rm the symlink and copy the materials directory in full.
+bench_container_cli exec "${BENCH_CONTAINER}" bash -lc \
+  "rm -rf '${BENCH_MOUNT}/workspace/main/benchmarks' '${BENCH_MOUNT}/workspace/main/wiki/benchmarks'
+   mkdir -p '${BENCH_MOUNT}/workspace/main/benchmarks/paper-review' '${BENCH_MOUNT}/workspace/main/wiki/benchmarks/paper-review'
+   mkdir -p '${BENCH_MOUNT}/workspace/main/wiki'" || log "WARNING: mkdir step failed (non-fatal)"
+
+if bench_container_cli exec "${BENCH_CONTAINER}" test -d "${BENCH_MOUNT}/benchmarks/paper-review/materials"; then
+  bench_container_cli exec "${BENCH_CONTAINER}" cp -a \
+    "${BENCH_MOUNT}/benchmarks/paper-review/materials" \
+    "${BENCH_MOUNT}/workspace/main/benchmarks/paper-review/" || true
+  bench_container_cli exec "${BENCH_CONTAINER}" cp -a \
+    "${BENCH_MOUNT}/benchmarks/paper-review/materials" \
+    "${BENCH_MOUNT}/workspace/main/wiki/benchmarks/paper-review/" || true
+  log "staged materials into workspace/main"
+else
+  log "WARNING: materials dir not found in container — agent may fail to read wiki files"
+fi
 
 # ── 3. Output directories ──────────────────────────────────────────
 log "ensuring output dirs"

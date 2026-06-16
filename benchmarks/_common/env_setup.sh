@@ -300,6 +300,8 @@ bench_reapply_setup() {
     echo "[bench_reapply_setup] stage repo into ${data_dir} (bind mount for ${container})"
     bench_container_cli stop "${container}" >/dev/null 2>&1 || true
     mkdir -p "${data_dir}"
+    chown -R "$(id -u):$(id -g)" "${data_dir}" 2>/dev/null || sudo chown -R "$(id -u):$(id -g)" "${data_dir}" 2>/dev/null || true
+    chmod -R u+rwX "${data_dir}" 2>/dev/null || true
     find "${data_dir}" -mindepth 1 -delete 2>/dev/null || true
     bench_tar_repo "${root}" | tar -xf - -C "${data_dir}"
     echo "[bench_reapply_setup] creating agent session dirs"

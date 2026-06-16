@@ -566,6 +566,9 @@ EOF
   declare -f bench_logs_tail
   declare -f bench_is_running
   declare -f bench_running_state
+  declare -f bench_ensure_running
+  declare -f bench_patch_openclaw_json_file
+  declare -f bench_tar_repo
   declare -f bench_runtime_up
   declare -f bench_reapply_setup
   declare -f bench_wait_ready

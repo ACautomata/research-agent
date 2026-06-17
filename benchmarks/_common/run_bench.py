@@ -688,22 +688,54 @@ def _run_task_statuses(container: str, run_id: str) -> list[str]:
             if t.get("runId") == run_id]
 
 
-def _extract_final_from_logs(stdout: str) -> str:
-    """Pull the agent's final answer out of ``openclaw logs --expect-final --json`` stdout.
+# Console-output patterns that look like a top-level log line (type=log, no
+# subsystem) but are NOT the agent's reply — they're emitted by the openclaw
+# CLI/runtime via console.log and end up in the file-log tail alongside real
+# agent output. The "last non-subsystem log line" heuristic gets fooled by
+# whichever of these happens to land at the bottom of the 250 KB tail window;
+# in CI run 27686228379/job 81885739532, QA-006 picked up
+# "Registered plugin command: /voice (plugin: talk-voice)" instead of the
+# 4253-char idea-cards reply that came earlier.
+_LOG_NOISE_PREFIXES = (
+    "Registered plugin command:",  # plugin manifest registration on CLI boot
+    "[tools] read failed",         # filesystem-tool diagnostic
+    "tools: read failed",          # same diagnostic, alternative format
+    "[plugins] ",                  # generic plugin lifecycle messages
+    "[context-engine] ",           # context-engine plugin diagnostics
+)
 
-    The stream interleaves the real reply with gateway internals:
+
+def _is_log_noise(message: str) -> bool:
+    """True if *message* matches a known non-agent-reply console.log noise pattern.
+
+    Used by :func:`_extract_final_from_logs` to skip CLI/plugin diagnostics
+    that share the same JSON shape as a real agent reply (``type=log``, no
+    ``subsystem``) but are not the agent's final answer.
+    """
+    stripped = message.lstrip()
+    return any(stripped.startswith(p) for p in _LOG_NOISE_PREFIXES)
+
+
+def _extract_final_from_logs(stdout: str) -> str:
+    """Pull the agent's final answer out of ``openclaw logs --json`` stdout.
+
+    The stream interleaves the real reply with gateway internals and CLI
+    console output:
 
       * ``{"type":"log", "subsystem":"gateway/ws", "message":"{\\"subsystem\\":...} ..."}``
         — gateway/websocket diagnostics (the bulk of the output);
       * ``{"type":"meta", ...}``  — a header line (file/cursor/size);
       * ``{"type":"notice", "message":"Log tail truncated (increase --max-bytes)."}``
         — appended when the tail exceeded ``--max-bytes``.
+      * ``{"type":"log", ...}`` with no ``subsystem`` and a ``console.log``
+        ``method`` — the agent's textual reply, but ALSO the CLI's plugin
+        registration banner ("Registered plugin command: /pair …") and a
+        handful of tool-failure diagnostics that share the same shape.
 
-    The agent's actual reply is a ``type == "log"`` line that carries **no**
-    ``subsystem`` field (its logger name is ``openclaw``, not a gateway
-    subsystem). There can be several such lines (a sub-agent deliverable, then
-    main's synthesis); we take the **last** non-empty one = main's final result.
-    Returns "" if none is found.
+    The agent's actual reply is the **last** ``type == "log"`` line that
+    carries no ``subsystem`` and does not match any of the
+    :data:`_LOG_NOISE_PREFIXES` — those are CLI/plugin console output that
+    happens to look like agent text. Returns "" if no usable line is found.
     """
     last = ""
     for line in stdout.splitlines():
@@ -719,8 +751,11 @@ def _extract_final_from_logs(stdout: str) -> str:
         if "subsystem" in evt:  # gateway internal (gateway/ws, plugins, …)
             continue
         msg = evt.get("message")
-        if isinstance(msg, str) and msg.strip():
-            last = msg
+        if not isinstance(msg, str) or not msg.strip():
+            continue
+        if _is_log_noise(msg):
+            continue
+        last = msg
     return last
 
 

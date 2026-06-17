@@ -90,24 +90,30 @@ def judge_with_rules(answer: str, qa: dict) -> dict:
 def judge_prompt(qa: dict, answer: str) -> str:
     """Build the score-only judge prompt for the dedicated judge agent.
 
-    The judge agent's AGENTS.md already documents: "如 prompt 要求纯数字评分，
-    输出只含 score (0 到 1 之间的数字)". We ask for exactly that so the score
-    can be parsed trivially out of the session log.
+    The prompt forces a bare numeric score: the closing directive (bilingual,
+    emphatic) forbids any explanation / JSON / prose, so the reply can be parsed
+    straight into a number by :func:`judge_parse`.
     """
     rubric = qa.get("rubric") or "Score how well the answer matches the gold answer on a 0-1 scale."
     gold = qa.get("gold_answer")
     return (
         "You are the dedicated OpenClaw Judge agent: strict, fair, uncompromising. "
-        "Read the QA, the reference answer, the rubric, and the candidate. "
-        "Score strictly according to the rubric and required fields. "
-        "Reply with ONLY a single number between 0 and 1 (the score). "
-        "Do not output anything else -- no JSON, no rationale, no prose.\n\n"
+        "Read the QA, the reference answer, the rubric, and the candidate, then score "
+        "strictly according to the rubric and required fields.\n\n"
         f"QA: {qa.get('question', '')}\n\n"
         f"REFERENCE: {json.dumps(gold, ensure_ascii=False) if gold else '(none)'}\n\n"
         f"RUBRIC: {rubric}\n\n"
         f"PASS_THRESHOLD: {qa.get('pass_threshold', 0.5)}\n\n"
-        f"CANDIDATE:\n{(answer or '')[:8000]}\n"
+        f"CANDIDATE:\n{(answer or '')[:8000]}\n\n"
+        "=== OUTPUT FORMAT (MANDATORY) ===\n"
+        "只输出一个 0 到 1 之间的数字作为分数。禁止输出任何解释、JSON、理由或其他文字。\n"
+        "Output ONLY a single number in [0, 1]. No explanation, no JSON, no rationale, "
+        "no prose — nothing else. Any non-numeric output is treated as an error."
     )
+
+
+class JudgeScoreParseError(ValueError):
+    """The judge agent's reply was not a parseable numeric score."""
 
 
 def _parse_judge_score(text: str) -> float | None:
@@ -136,15 +142,21 @@ def _parse_judge_score(text: str) -> float | None:
     return None
 
 
-def judge_parse(text: str, qa: dict, candidate: str = "") -> dict:
+def judge_parse(text: str, qa: dict, candidate: str = "", *, strict: bool = False) -> dict:
     """Turn the judge agent's output text into a verdict.
 
-    Parses a 0..1 score with :func:`_parse_judge_score`; on failure, degrades to
-    rule scoring against *candidate* and tags the rationale so the report can
-    distinguish a real judge verdict from a degraded one.
+    Parses a 0..1 score with :func:`_parse_judge_score`. With ``strict=True``
+    (the benchmark flow) a non-numeric reply raises :class:`JudgeScoreParseError`
+    instead of degrading to rule scoring, so a broken judge never silently
+    masquerades as a rule verdict. With ``strict=False`` (manual CLI) it falls
+    back to rule scoring on parse failure and tags the rationale.
     """
     score = _parse_judge_score(text or "")
     if score is None:
+        if strict:
+            raise JudgeScoreParseError(
+                f"judge reply was not a numeric score: {(text or '').strip()[:160]!r}"
+            )
         fallback = judge_with_rules(candidate, qa)
         fallback["rationale"] = "agent judge score parse fail; " + fallback["rationale"]
         return fallback
@@ -209,9 +221,10 @@ def judge_with_agent(qa: dict, answer: str, agent_id: str = "judge",
     parses the score. Falls back to rule scoring on timeout / CLI failure /
     parse failure, tagging the rationale so a degraded verdict is visible.
 
-    The benchmark itself (run_bench.py) does NOT use this: it routes judging
-    through the same trigger -> wait -> read-logs path as the answer QA via
-    ``judge_prompt`` + ``judge_parse``.
+    The benchmark itself (run_bench.py) does NOT use this manual helper: its
+    ``_run_judge`` makes the same direct ``--agent judge`` call but parses the
+    score strictly (``judge_parse(..., strict=True)``), raising
+    :class:`JudgeScoreParseError` on a non-numeric reply instead of falling back.
     """
     agent_id = "judge"
     prompt = judge_prompt(qa, answer)

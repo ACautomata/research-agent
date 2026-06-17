@@ -732,13 +732,13 @@ def _collect_final_via_logs(container: str, timeout_ms: int = 120_000,
     ``--expect-final`` waits for the agent's final response; we then parse the
     emitted JSON log lines with :func:`_extract_final_from_logs` to recover the
     real reply (skipping gateway/websocket noise and the truncation footer).
-    ``--max-bytes`` is raised well above the default so a long final answer is
-    not dropped before we can read it. Returns "" if nothing is captured.
+    Uses the gateway's default ``--limit`` / ``--max-bytes`` — passing values
+    above the gateway schema cap makes the call fail outright. Returns "" if
+    nothing is captured.
     """
     cmd = _container_exec_cmd(container, "openclaw", "logs",
                               "--expect-final", "--json",
-                              "--timeout", str(timeout_ms),
-                              "--limit", "400", "--max-bytes", "2000000")
+                              "--timeout", str(timeout_ms))
     try:
         proc = subprocess.run(cmd, stdin=subprocess.DEVNULL,
                               capture_output=True, text=True,
@@ -773,9 +773,10 @@ def run_agent(container: str, agent_id: str, qa: dict, run_id: str,
        ``subsystem``, skipping gateway/ws noise + the truncation footer).
 
     Returns ``(answer, session_key, raw)``. Raises :class:`BenchmarkTimedOut`
-    if any task in the run ends in a terminal failure (the caller aborts the
-    benchmark). If the synchronous *send* itself hangs past budget, this QA is
-    flagged ``send_timed_out`` and returned for main() to fail (not an abort).
+    if any task in the run ends in a terminal failure, the synchronous *send*
+    itself hangs past budget, or ``logs --expect-final`` fails to produce a
+    final answer (any of these aborts the whole benchmark — there is no
+    fallback to the synchronous send's interim payload).
     """
     prompt = _build_qa_prompt(qa)
     # Unique key per QA attempt so every run starts from an empty conversation.
@@ -788,7 +789,6 @@ def run_agent(container: str, agent_id: str, qa: dict, run_id: str,
     before_ids = _snapshot_run_ids(container)
     res = _run_agent_once(container, agent_id, prompt, session_key, model,
                           timeout=timeout, debug_dir=debug_dir, debug_prefix="s_")
-    interim = _extract_agent_text(res["stdout"], res["stderr"])
 
     # 2. identify the run created by this QA.
     run_id_found = _discover_run_id(container, before_ids)
@@ -796,59 +796,69 @@ def run_agent(container: str, agent_id: str, qa: dict, run_id: str,
         _debug_write(debug_dir / "s_06_run_id.txt", run_id_found or "(not found)")
 
     # 3. watcher: wait for all-succeeded, or abort on timed_out / cancelled.
-    #    If the send itself hung, skip the watcher — main() fails just this QA.
+    #    A hung synchronous send is itself a benchmark abort — we cannot trust
+    #    that the run will ever complete, and we must not silently fall through
+    #    to whatever partial text the CLI managed to print.
     # Any terminal non-success status (timed_out/cancelled/failed/lost) aborts
     # the benchmark: the spec lists timed_out/cancelled; failed/lost are the
     # same category (terminal failure that will never reach all-succeeded) and
     # must be treated identically or the watcher would hang forever on them.
     _FAIL_STATUSES = ("timed_out", "cancelled", "failed", "lost")
-    watch_status = "ok"
     if res.get("timed_out"):
-        watch_status = "send_timed_out"
-    else:
-        rid = run_id_found
-        no_status_streak = 0
-        # Polls with no visible task before we conclude the store is unreachable.
-        grace_polls = max(1, 120 // max(1, _POLL_INTERVAL))
-        while True:
-            if rid is None:
-                rid = _discover_run_id(container, before_ids)  # may register late
-            statuses = _run_task_statuses(container, rid) if rid else []
-            if statuses:
-                no_status_streak = 0
-                if any(s in _FAIL_STATUSES for s in statuses):
-                    bad = sorted({s for s in statuses if s in _FAIL_STATUSES})
-                    raise BenchmarkTimedOut(
-                        f"QA {qa.get('qa_id')} run {rid or '?'}: "
-                        f"a task hit {bad}")
-                if all(s == "succeeded" for s in statuses):
-                    break
-            else:
-                no_status_streak += 1
-                if no_status_streak >= grace_polls:
-                    raise BenchmarkTimedOut(
-                        f"QA {qa.get('qa_id')}: no tasks visible for run "
-                        f"{rid or '?'} after {grace_polls * _POLL_INTERVAL}s — "
-                        f"task store unreachable or run id not found")
-            time.sleep(_POLL_INTERVAL)
+        raise BenchmarkTimedOut(
+            f"QA {qa.get('qa_id')}: synchronous send hung past "
+            f"{timeout}s budget (run {run_id_found or '?'})")
+    rid = run_id_found
+    no_status_streak = 0
+    # Polls with no visible task before we conclude the store is unreachable.
+    grace_polls = max(1, 120 // max(1, _POLL_INTERVAL))
+    while True:
+        if rid is None:
+            rid = _discover_run_id(container, before_ids)  # may register late
+        statuses = _run_task_statuses(container, rid) if rid else []
+        if statuses:
+            no_status_streak = 0
+            if any(s in _FAIL_STATUSES for s in statuses):
+                bad = sorted({s for s in statuses if s in _FAIL_STATUSES})
+                raise BenchmarkTimedOut(
+                    f"QA {qa.get('qa_id')} run {rid or '?'}: "
+                    f"a task hit {bad}")
+            if all(s == "succeeded" for s in statuses):
+                break
+        else:
+            no_status_streak += 1
+            if no_status_streak >= grace_polls:
+                raise BenchmarkTimedOut(
+                    f"QA {qa.get('qa_id')}: no tasks visible for run "
+                    f"{rid or '?'} after {grace_polls * _POLL_INTERVAL}s — "
+                    f"task store unreachable or run id not found")
+        time.sleep(_POLL_INTERVAL)
 
     # 4. read the final answer from logs --expect-final (last JSON object).
+    #    Empty answer here is a hard abort: the contract is that every
+    #    succeeded run produces a final-message log line, so an empty result
+    #    means either logs.tail failed (e.g. invalid params) or the run did
+    #    not actually deliver a final answer. Either way we must NOT silently
+    #    substitute the synchronous send's interim payload — that just hides
+    #    a real failure behind whatever stub the agent yielded mid-flight.
     answer = _collect_final_via_logs(container, timeout_ms=120_000, debug_dir=debug_dir)
     if not answer:
-        answer = interim
-        watch_status = f"{watch_status}+fallback"
+        raise BenchmarkTimedOut(
+            f"QA {qa.get('qa_id')} run {run_id_found or '?'}: "
+            f"openclaw logs --expect-final returned no agent reply "
+            f"(see l_01_logs_stdout.txt / l_02_logs_stderr.txt)")
 
     if debug_dir is not None:
         _debug_write(debug_dir / "04_agent_text.txt", answer)
         _debug_write(debug_dir / "05_meta.json", json.dumps({
             "qa_id": qa.get("qa_id"), "session_key": session_key,
-            "run_id_found": run_id_found, "watch_status": watch_status,
+            "run_id_found": run_id_found,
             "returncode": res["returncode"], "send_timed_out": res["timed_out"],
-            "interim_chars": len(interim), "answer_chars": len(answer),
+            "answer_chars": len(answer),
         }, ensure_ascii=False, indent=2))
 
     raw = {**res, "prompt": prompt, "agent_text": answer,
-           "run_id": run_id_found, "watch_status": watch_status, "interim": interim}
+           "run_id": run_id_found}
     return (answer, session_key, raw)
 
 
@@ -1168,36 +1178,22 @@ def main(bench_name: str, agent_id: str | None = None) -> int:
                 break
             elapsed = time.time() - t0
             mode = qa.get("judge", "rules")
-            if raw.get("timed_out"):
-                # The synchronous send never returned (the agent + its spawned
-                # sub-agents ran past the wall-clock cap). Skip scoring and mark
-                # the QA failed so the benchmark continues with the rest.
-                verdict = {
-                    "score": 0.0,
-                    "pass": False,
-                    "rationale": (
-                        f"agent call timed out after "
-                        f"{int(qa.get('timeout_seconds', 180))}s; "
-                        f"agent did not produce a final answer within the budget"
-                    ),
-                }
+            if mode == "agent":
+                # Direct synchronous call to the dedicated `judge` agent; the
+                # number-only prompt + strict parse raises JudgeScoreParseError
+                # on any non-numeric reply. Surface that as an explicit failed
+                # QA (score 0) rather than silently degrading to rule scoring.
+                try:
+                    verdict = _run_judge(container, qa, answer, run_id, model,
+                                         debug_dir=qa_debug_dir)
+                except JudgeScoreParseError as jexc:
+                    verdict = {
+                        "score": 0.0,
+                        "pass": False,
+                        "rationale": f"judge returned non-numeric output: {jexc}",
+                    }
             else:
-                if mode == "agent":
-                    # Direct synchronous call to the dedicated `judge` agent; the
-                    # number-only prompt + strict parse raises JudgeScoreParseError
-                    # on any non-numeric reply. Surface that as an explicit failed
-                    # QA (score 0) rather than silently degrading to rule scoring.
-                    try:
-                        verdict = _run_judge(container, qa, answer, run_id, model,
-                                             debug_dir=qa_debug_dir)
-                    except JudgeScoreParseError as jexc:
-                        verdict = {
-                            "score": 0.0,
-                            "pass": False,
-                            "rationale": f"judge returned non-numeric output: {jexc}",
-                        }
-                else:
-                    verdict = judge_with_rules(answer, qa)
+                verdict = judge_with_rules(answer, qa)
             # Dump judge artifacts when DEBUG is on.
             if qa_debug_dir is not None:
                 _debug_write(qa_debug_dir / "06_verdict.json", json.dumps(verdict, ensure_ascii=False, indent=2))

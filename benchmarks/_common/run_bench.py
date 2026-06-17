@@ -553,25 +553,36 @@ def load_qa(path: Path) -> list[dict]:
 def _run_agent_once(container: str, agent_id: str, prompt: str, session_key: str,
                     model: str | None = None, timeout: int = 180,
                     debug_dir: Path | None = None, debug_prefix: str = "") -> dict:
-    """One synchronous ``openclaw agent`` call.
+    """One synchronous ``openclaw agent`` call via the gateway.
+
+    Routed through the gateway (NOT ``--local`` embedded) so the run is tracked
+    as a durable task: the PRD task-watcher in :func:`run_agent` polls
+    ``openclaw tasks`` for it, and ``openclaw logs --expect-final`` can read its
+    final answer. Embedded ``--local`` runs do not register tasks, which would
+    leave the watcher with nothing to observe.
 
     Blocks until the agent's turn ends, so a single-turn agent (e.g. ``judge``)
     returns its reply directly in the CLI stdout. For the answer QA, main may end
-    its turn early (before spawned sub-agents finish); the PRD task-watcher +
-    ``logs --expect-final`` flow in :func:`run_agent` handles that. Bounded by
-    ``timeout`` (passed to openclaw as ``--timeout``) plus a 30s subprocess grace;
-    a hung agent is killed and flagged ``timed_out`` so the run continues.
+    its turn early (before spawned sub-agents finish); the watcher +
+    ``logs --expect-final`` handle that. Bounded by ``timeout`` (passed to
+    openclaw as ``--timeout``) plus a 30s subprocess grace; a hung agent is
+    killed and flagged ``timed_out`` so the run continues.
     """
     cmd = _container_exec_cmd(
         container, "openclaw", "agent",
-        "--agent", agent_id, "--message", prompt, "--json", "--local",
+        "--agent", agent_id, "--message", prompt, "--json",
         "--session-key", session_key,
         "--timeout", str(timeout),
         interactive=True,
         env=["LLM_API_KEY", "LLM_BASE_URL"],
     )
-    if model:
-        cmd += ["--model", model]
+    # NOTE: we deliberately do NOT pass --model here. env_setup.sh patches the
+    # gateway's configured default model to LLM_MODEL, so the agent already runs
+    # on the intended model. Passing --model makes the gateway treat it as a
+    # per-call *override*, which it gates behind the agent's model allow-list —
+    # and that check is flaky ("Model override ... is not allowed for agent
+    # main"). Embedded --local used to bypass it; gateway mode does not.
+    _ = model  # accepted for API stability; the gateway default is used instead.
     timed_out = False
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 30)
@@ -677,18 +688,57 @@ def _run_task_statuses(container: str, run_id: str) -> list[str]:
             if t.get("runId") == run_id]
 
 
+def _extract_final_from_logs(stdout: str) -> str:
+    """Pull the agent's final answer out of ``openclaw logs --expect-final --json`` stdout.
+
+    The stream interleaves the real reply with gateway internals:
+
+      * ``{"type":"log", "subsystem":"gateway/ws", "message":"{\\"subsystem\\":...} ..."}``
+        — gateway/websocket diagnostics (the bulk of the output);
+      * ``{"type":"meta", ...}``  — a header line (file/cursor/size);
+      * ``{"type":"notice", "message":"Log tail truncated (increase --max-bytes)."}``
+        — appended when the tail exceeded ``--max-bytes``.
+
+    The agent's actual reply is a ``type == "log"`` line that carries **no**
+    ``subsystem`` field (its logger name is ``openclaw``, not a gateway
+    subsystem). There can be several such lines (a sub-agent deliverable, then
+    main's synthesis); we take the **last** non-empty one = main's final result.
+    Returns "" if none is found.
+    """
+    last = ""
+    for line in stdout.splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            evt = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if evt.get("type") != "log":
+            continue
+        if "subsystem" in evt:  # gateway internal (gateway/ws, plugins, …)
+            continue
+        msg = evt.get("message")
+        if isinstance(msg, str) and msg.strip():
+            last = msg
+    return last
+
+
 def _collect_final_via_logs(container: str, timeout_ms: int = 120_000,
                             debug_dir: Path | None = None) -> str:
     """Read the agent's final delivered answer via ``openclaw logs --expect-final``.
 
     Called after the task watcher confirms the run completed (PRD step 3).
-    ``--expect-final`` waits for the agent's final response; we return the
-    ``message`` of the **last** JSON log object (main's final result). Returns
-    "" if nothing is captured.
+    ``--expect-final`` waits for the agent's final response; we then parse the
+    emitted JSON log lines with :func:`_extract_final_from_logs` to recover the
+    real reply (skipping gateway/websocket noise and the truncation footer).
+    ``--max-bytes`` is raised well above the default so a long final answer is
+    not dropped before we can read it. Returns "" if nothing is captured.
     """
     cmd = _container_exec_cmd(container, "openclaw", "logs",
                               "--expect-final", "--json",
-                              "--timeout", str(timeout_ms), "--limit", "200")
+                              "--timeout", str(timeout_ms),
+                              "--limit", "400", "--max-bytes", "2000000")
     try:
         proc = subprocess.run(cmd, stdin=subprocess.DEVNULL,
                               capture_output=True, text=True,
@@ -699,19 +749,7 @@ def _collect_final_via_logs(container: str, timeout_ms: int = 120_000,
     if debug_dir is not None:
         _debug_write(debug_dir / "l_01_logs_stdout.txt", proc.stdout or "")
         _debug_write(debug_dir / "l_02_logs_stderr.txt", proc.stderr or "")
-    last_evt: object = None
-    for line in (proc.stdout or "").splitlines():
-        line = line.strip()
-        if not line.startswith("{"):
-            continue
-        try:
-            last_evt = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-    if isinstance(last_evt, dict):
-        msg = last_evt.get("message")
-        return msg if isinstance(msg, str) else ""
-    return ""
+    return _extract_final_from_logs(proc.stdout or "")
 
 
 def run_agent(container: str, agent_id: str, qa: dict, run_id: str,
@@ -722,18 +760,20 @@ def run_agent(container: str, agent_id: str, qa: dict, run_id: str,
        (no sleep suffix); main may yield early — that is fine.
     2. Discover the run id created by this QA.
     3. **Watcher** — poll ``openclaw tasks --json`` for the run's task statuses:
-         * any task ``timed_out`` or ``cancelled`` → abort the whole benchmark;
+         * any task terminal-but-not-succeeded (``timed_out`` / ``cancelled`` /
+           ``failed`` / ``lost``) → abort the whole benchmark;
          * every task ``succeeded`` → the run is complete;
          * otherwise (``running`` / ``queued`` / …) → keep waiting.
        There is no wall-clock bailout for a run that is still progressing: we
        wait until it reaches ``all-succeeded`` or a terminal failure. The only
        abort here besides a terminal failure is when NO task is ever visible for
        the run (task store unreachable / discovery failed) for a grace period.
-    4. ``openclaw logs --expect-final --json`` → the last JSON object's
-       ``message`` is the agent's final answer.
+    4. ``openclaw logs --expect-final --json`` → :func:`_extract_final_from_logs`
+       recovers the agent's final reply (the last ``type:"log"`` line with no
+       ``subsystem``, skipping gateway/ws noise + the truncation footer).
 
     Returns ``(answer, session_key, raw)``. Raises :class:`BenchmarkTimedOut`
-    if any task in the run is ``timed_out``/``cancelled`` (the caller aborts the
+    if any task in the run ends in a terminal failure (the caller aborts the
     benchmark). If the synchronous *send* itself hangs past budget, this QA is
     flagged ``send_timed_out`` and returned for main() to fail (not an abort).
     """
@@ -757,6 +797,11 @@ def run_agent(container: str, agent_id: str, qa: dict, run_id: str,
 
     # 3. watcher: wait for all-succeeded, or abort on timed_out / cancelled.
     #    If the send itself hung, skip the watcher — main() fails just this QA.
+    # Any terminal non-success status (timed_out/cancelled/failed/lost) aborts
+    # the benchmark: the spec lists timed_out/cancelled; failed/lost are the
+    # same category (terminal failure that will never reach all-succeeded) and
+    # must be treated identically or the watcher would hang forever on them.
+    _FAIL_STATUSES = ("timed_out", "cancelled", "failed", "lost")
     watch_status = "ok"
     if res.get("timed_out"):
         watch_status = "send_timed_out"
@@ -771,9 +816,8 @@ def run_agent(container: str, agent_id: str, qa: dict, run_id: str,
             statuses = _run_task_statuses(container, rid) if rid else []
             if statuses:
                 no_status_streak = 0
-                if any(s in ("timed_out", "cancelled") for s in statuses):
-                    bad = sorted({s for s in statuses
-                                  if s in ("timed_out", "cancelled")})
+                if any(s in _FAIL_STATUSES for s in statuses):
+                    bad = sorted({s for s in statuses if s in _FAIL_STATUSES})
                     raise BenchmarkTimedOut(
                         f"QA {qa.get('qa_id')} run {rid or '?'}: "
                         f"a task hit {bad}")

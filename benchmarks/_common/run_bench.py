@@ -20,8 +20,10 @@ chooses to wait for its sub-agents):
   3. ``openclaw logs --expect-final --json`` yields the agent's true final
      delivered answer; its ``message`` field is what we judge.
 
-The CI scoring step (``judge: "agent"``) uses the dedicated ``judge`` agent via a
-single synchronous call (judges do not spawn sub-agents) and parses a 0..1 score.
+The CI scoring step (``judge: "agent"``) fires the dedicated ``judge`` agent as a
+standalone ``openclaw agent --agent judge --local`` subprocess (separate from the
+send→watch→logs flow — judges never spawn sub-agents) and parses its CLI reply
+straight into a 0..1 score; see :func:`_run_judge`.
 
 Per-benchmark `metrics.py` becomes a 6-line shim:
 
@@ -485,8 +487,10 @@ def _extract_qa_sessions(container: str, session_key: str,
 #      timed_out → abort the benchmark.
 #   3. `openclaw logs --expect-final --json` → its `message` is the final answer.
 #
-# The `judge` agent is called directly (`openclaw agent --agent judge`) in a
-# single synchronous turn with a number-only prompt; see `_run_judge`.
+# The `judge` agent is called as its own standalone subprocess
+# (`openclaw agent --agent judge --local`), decoupled from this send→watch→logs
+# flow, with a number-only prompt whose reply is parsed straight into a score;
+# see `_run_judge`.
 
 
 def repair_container_permissions(container: str) -> None:
@@ -897,22 +901,65 @@ def run_agent(container: str, agent_id: str, qa: dict, run_id: str,
     return (answer, session_key, raw)
 
 
+# A working judge turn returns a bare 0..1 score in ~8s. The old 600s ceiling was
+# the "agent as judge" timeout point — a single score should never need 10 min, so
+# bound it hard. (Observed in CI run 27690800218: agent-judge calls that succeed
+# finish in seconds; the 600s cap only ever masked a hung/flaky judge.)
+_JUDGE_TIMEOUT = 180
+
+
 def _run_judge(container: str, qa: dict, answer: str, run_id: str,
                model: str | None, debug_dir: Path | None = None) -> dict:
-    """LLM-judge a candidate *answer* via a direct synchronous call to ``judge``.
+    """LLM-judge a candidate *answer* with a standalone, direct call to ``judge``.
 
-    ``openclaw agent --agent judge --message <judge_prompt>`` runs the judge in a
-    single turn (no sub-agents, no main routing) and returns its score directly
-    in the CLI reply. The prompt mandates a bare numeric score;
-    :func:`judge.judge_parse` is called with ``strict=True`` so a non-numeric
-    reply raises :class:`judge.JudgeScoreParseError` (the caller surfaces this as
-    a failed QA instead of silently degrading to rule scoring).
+    Deliberately decoupled from the main-QA machinery: this does **not** reuse
+    :func:`_run_agent_once` (gateway-routed, task-tracked, watched). The judge is
+    a single-turn scoring call, so it is fired as its own subprocess —
+    ``openclaw agent --agent judge --message <judge_prompt> --local`` — and the
+    CLI's reply is parsed straight into a 0..1 number.
+
+    Why ``--local`` (embedded) and not the gateway: embedded mode skips gateway
+    task registration and the watcher entirely, which is exactly right for a
+    judge that never spawns sub-agents. It also keeps the judge off the gateway's
+    session/heartbeat path that intermittently made it answer ``HEARTBEAT_OK``
+    instead of scoring (CI 27690800218, paper-review-1/s3-cherrypick).
+
+    The prompt mandates a bare numeric score, so the reply is parsed directly as
+    a number (:func:`judge.judge_parse`, ``strict=True``). A non-numeric reply —
+    or a timeout / CLI failure — raises :class:`judge.JudgeScoreParseError`, which
+    the caller records as score 0 rather than silently degrading to rule scoring.
     """
     prompt = judge_prompt(qa, answer)
-    session_key = f"agent:judge:bench-judge-{run_id}-{qa['qa_id']}-{uuid.uuid4().hex}"
-    res = _run_agent_once(container, "judge", prompt, session_key, model,
-                          timeout=600, debug_dir=debug_dir, debug_prefix="j_")
-    text = _extract_agent_text(res["stdout"], res["stderr"])
+    session_key = (f"agent:judge:bench-judge-{run_id}-{qa['qa_id']}-"
+                   f"{uuid.uuid4().hex}")
+    cmd = _container_exec_cmd(
+        container, "openclaw", "agent",
+        "--agent", "judge", "--message", prompt,
+        "--json", "--local",
+        "--session-key", session_key,
+        "--timeout", str(_JUDGE_TIMEOUT),
+        interactive=True,
+        env=["LLM_API_KEY", "LLM_BASE_URL"],
+    )
+    # NOTE: we deliberately do NOT pass --model. The judge runs on the configured
+    # default model (LLM_MODEL); a per-call --model override is gated behind the
+    # agent model allow-list and is flaky, so leave it off.
+    _ = model  # accepted for API symmetry with run_agent; unused.
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True,
+                              timeout=_JUDGE_TIMEOUT + 30)
+        stdout, stderr = proc.stdout or "", proc.stderr or ""
+    except subprocess.TimeoutExpired:
+        raise JudgeScoreParseError(
+            f"judge agent timed out after {_JUDGE_TIMEOUT}s (run {run_id})")
+    if debug_dir is not None:
+        _debug_write(debug_dir / "j_01_cmd.json",
+                     json.dumps(cmd, ensure_ascii=False, indent=2))
+        _debug_write(debug_dir / "j_02_stdout.txt", stdout)
+        _debug_write(debug_dir / "j_03_stderr.txt", stderr)
+    # The prompt forces a bare number; pull the agent text out of the --json
+    # reply and parse it directly as the score.
+    text = _extract_agent_text(stdout, stderr)
     if debug_dir is not None:
         _debug_write(debug_dir / "j_04_judge_text.txt", text)
     return judge_parse(text, qa, answer, strict=True)
@@ -1225,7 +1272,7 @@ def main(bench_name: str, agent_id: str | None = None) -> int:
                     verdict = {
                         "score": 0.0,
                         "pass": False,
-                        "rationale": f"judge returned non-numeric output: {jexc}",
+                        "rationale": f"judge did not return a numeric score: {jexc}",
                     }
             else:
                 verdict = judge_with_rules(answer, qa)

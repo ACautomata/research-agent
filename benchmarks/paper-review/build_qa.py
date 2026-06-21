@@ -17,10 +17,18 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 SRC = ROOT / "benchmarks" / "paper-review" / "seed_qa.json"
 FLE_SRC = ROOT / "benchmarks" / "paper-review" / "fle_qa.json"
 DST = ROOT / "benchmarks" / "paper-review" / "qa.jsonl"
+SHARD_SIZE = 5
+
+
+def normalize_material_text(text: str) -> str:
+    return (text or "").replace(
+        "benchmark/materials/fle/",
+        "benchmarks/paper-review/materials/fle/",
+    )
 
 
 def convert(item: dict) -> dict:
-    sa = item.get("standard_answer") or {}
+    sa = item.get("standard_answer") or item.get("gold_answer") or {}
     must = sa.get("must_contain") or []
     fields = sa.get("fields") or []
     must_not = sa.get("must_not_contain") or []
@@ -36,31 +44,26 @@ def convert(item: dict) -> dict:
         ga["must_not_contain"] = must_not
         ga.setdefault("violation_penalty", 1)
     question = item.get("question", "")
-    # Append inline-return instruction so the sub-agent returns its full
-    # output in the reply body rather than writing to a file and returning
-    # only a path/status summary.
-    if "直接返回" not in question and "直接在回复" not in question:
-        question += (
-            "\n\n重要：完成分析后必须将完整 Markdown 正文直接返回在回复中。"
-            "不得只回复文件路径、'已保存到' 或 '任务完成' 等状态摘要。"
-            "回复的第一行就应该是 Markdown 正文的标题。"
-        )
+    qa_id = item.get("id") or item.get("qa_id")
+    if not qa_id:
+        raise ValueError(f"QA item missing id/qa_id: {item!r}")
+    task_type = item.get("capability") or item.get("task_type")
     return {
-        "qa_id": item["id"],
+        "qa_id": qa_id,
         # CI invokes main; target_agent makes the benchmark directive force
         # delegation to paper-review. The runner scores the relayed final
         # Markdown answer directly.
         "agent": "main",
         "target_agent": "paper-review",
         "skill": item.get("skill"),
-        "task_type": item.get("capability"),
-        "input_material": item.get("input_material", ""),
+        "task_type": task_type,
+        "input_material": normalize_material_text(item.get("input_material", "")),
         "question": question,
         "gold_answer": ga,
-        "rubric": sa.get("key_behavior", "Match the must_contain and key_behavior."),
-        "rubric_dimensions": item.get("dimensions", []),
+        "rubric": item.get("rubric") or sa.get("key_behavior", "Match the must_contain and key_behavior."),
+        "rubric_dimensions": item.get("dimensions") or item.get("rubric_dimensions", []),
         "pass_threshold": 0.5,
-        "judge": "agent",
+        "judge": item.get("judge", "agent"),
         "weight": 1.0,
     }
 
@@ -91,6 +94,7 @@ def load_fle_items() -> list[dict]:
         item.setdefault("agent", "main")
         item.setdefault("pass_threshold", 0.5)
         item.setdefault("weight", 1.0)
+        item["input_material"] = normalize_material_text(item.get("input_material", ""))
         validated.append(item)
 
     print(f"[build_qa] Loaded {len(validated)} Focus-Level Eval QA items from {FLE_SRC}")
@@ -112,6 +116,18 @@ def main() -> int:
     DST.write_text("\n".join(all_lines) + "\n", encoding="utf-8")
     print(f"[build_qa] wrote {DST} ({len(all_lines)} total QA items: "
           f"{len(seed_lines)} seed + {len(fle_lines)} FLE)")
+
+    # CI/local shard runs use paper-review-1..N directories. Keep those
+    # shard qa.jsonl files in lockstep with the first 24 seed QA items; FLE
+    # items are intentionally excluded from these shards.
+    for idx in range(0, len(seed_lines), SHARD_SIZE):
+        shard_num = idx // SHARD_SIZE + 1
+        shard_dir = ROOT / "benchmarks" / f"paper-review-{shard_num}"
+        if not shard_dir.exists():
+            continue
+        shard_lines = seed_lines[idx:idx + SHARD_SIZE]
+        (shard_dir / "qa.jsonl").write_text("\n".join(shard_lines) + "\n", encoding="utf-8")
+        print(f"[build_qa] wrote {shard_dir / 'qa.jsonl'} ({len(shard_lines)} seed QA items)")
     return 0
 
 

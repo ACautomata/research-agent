@@ -1,0 +1,2 @@
+{"type":"init","timestamp":"2026-06-15T18:40:07.823Z","details":{"createdDirectories":[],"createdFiles":[".openclaw-wiki/log.jsonl"]}}
+{"type":"ingest","timestamp":"2026-06-16T02:40:00.000Z","paper":"AdaLoRA: Adaptive Budget Allocation for Parameter-Efficient Fine-Tuning","path":"sources/petl/2026-06-16-adalora.md"}

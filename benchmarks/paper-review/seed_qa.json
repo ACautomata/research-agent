@@ -462,7 +462,7 @@
     "skill": "paper-validation-experiment-designer",
     "task_type": "validation-design-minimal",
     "input_material": "上游问题（ReAct hallucination 归因）：\nP1: 0% hallucination 来自 Wikipedia 覆盖还是 ReAct 机制？\n约束：仅 API 访问（无 GPU），预算 100 次 API 调用，必须单变量可控。",
-    "question": "设计最小可验证实验区分 ReAct hallucination 消除原因。必须单变量可控，100 次 API 内完成。忽略无关上下文，聚焦最核心的归因问题。",
+    "question": "设计最小可验证实验区分 ReAct hallucination 消除原因。必须单变量可控，100 次 API 内完成。忽略无关上下文，聚焦最核心的归因问题。直接给最终答案，不要创建外部文件，不要展开长背景；按固定字段输出：实验目的、单变量、控制项、100 次 API 分配、指标、判定规则。",
     "gold_answer": {
       "must_contain": [
         "单变量",
@@ -472,9 +472,9 @@
         "控制",
         "指标"
       ],
-      "key_behavior": "极简设计，100 次 API 内完成；只改变检索/信息源相关变量，明确控制项和观测指标"
+      "key_behavior": "极简设计，100 次 API 内完成；只改变检索/信息源相关变量，明确控制项、API 调用分配、观测指标和判定规则"
     },
-    "rubric": "极简单变量设计，100 次 API 内可完成。必须说明控制项、改变项和观测指标。",
+    "rubric": "极简单变量设计，100 次 API 内可完成。必须说明控制项、唯一改变项、API 调用分配、观测指标和判定规则；避免长背景和无关方案。",
     "rubric_dimensions": [
       "validation-design",
       "minimalism",
@@ -519,18 +519,20 @@
     "skill": "claude-code-validation-task-prompt-generator",
     "task_type": "claude-code-generation",
     "input_material": "论文: AdaLoRA (ICLR 2023)\n仓库: github.com/QingruZhang/AdaLoRA\n\n上游验证实验:\nE1: APV替换式消融（PCA/随机投影/恒等映射），Cora+DeBERTaV3\nE2: 等计算量对比（LoRA rank增大到等训练时间）\nE3: seed稳定性（5 seeds，Kendall Tau）",
-    "question": "帮我把 AdaLoRA 的验证实验写成可执行的 prompt，给 AI coding 工具用的。要指向具体的文件位置，尽量复用现有代码别大改，最后能跑出结果来。代码在 github.com/QingruZhang/AdaLoRA。",
+    "question": "帮我把 AdaLoRA 的验证实验写成可执行的 prompt，给 AI coding 工具用的。要指向具体的文件位置，尽量复用现有代码别大改，最后能跑出结果来。代码在 github.com/QingruZhang/AdaLoRA。最终回答必须内联完整 prompt 正文，不要只说已写入文件或位于某目录；prompt 中必须包含仓库 URL、候选文件路径或需先定位的文件、配置入口、运行命令和完成标准。",
     "gold_answer": {
       "must_contain": [
         "github.com/QingruZhang/AdaLoRA",
+        "完整 prompt",
         "文件",
         "配置",
-        "标准"
+        "运行",
+        "完成标准"
       ],
       "violation_penalty": 2,
-      "key_behavior": "生成可执行的验证 prompt，要求 coding 工具定位/修改具体文件，尽量复用现有代码，有配置入口和可度量的完成标准"
+      "key_behavior": "最终回答内联完整可执行 prompt，要求 coding 工具定位/修改具体文件，尽量复用现有代码，有配置入口、运行命令和可度量的完成标准；不能只回复文件已写好或位于某目录"
     },
-    "rubric": "生成的 prompt 应可交给 AI coding 工具执行，要求定位具体文件/配置入口、复用现有代码，并写清完成标准。",
+    "rubric": "生成的 prompt 应可直接交给 AI coding 工具执行，最终回答必须内联完整 prompt 正文；要求定位具体文件/配置入口、复用现有代码、给出运行命令，并写清完成标准。若只说明已写入文件或只列目录，应判低分。",
     "rubric_dimensions": [
       "code-prompt",
       "specificity",
@@ -629,7 +631,7 @@
     "skill": "paper-pipeline-quality-auditor",
     "task_type": "pipeline-audit-cross",
     "input_material": "上游产出摘要：\n问题分析阶段给出了 3 条验证主张：P1(APV替换式消融,高优先级), P2(增益诊断,高), P3(方差根因,中)\n实验设计阶段产出了 2 个实验：E1(Decoder-only架构,对应P3), E2(seed稳定性,无对应主张)\n\nP1 最高优先级在实验设计阶段丢失了，且引入了一个问题分析阶段没提过的 Decoder-only 方向。",
-    "question": "帮我审查问题分析阶段和实验设计阶段之间的一致性。最高优先级的 P1 在实验设计里丢了，还多了个新方向 Decoder-only，这算不算断裂？给一致性评分和修复建议。",
+    "question": "帮我审查问题分析阶段和实验设计阶段之间的一致性。最高优先级的 P1 在实验设计里丢了，还多了个新方向 Decoder-only，这算不算断裂？按固定字段输出：是否断裂、一致性评分、丢失项、新增无来源方向、修复建议。",
     "gold_answer": {
       "must_contain": [
         "优先级",
@@ -639,9 +641,9 @@
         "一致性",
         "Decoder-only"
       ],
-      "key_behavior": "识别最高优先级 P1 丢失；检测实验设计阶段引入的问题分析未支持的新方向；给出一致性评分和修复建议"
+      "key_behavior": "识别最高优先级 P1 丢失；检测 Decoder-only 是实验设计阶段引入且问题分析未支持的新方向；给出一致性评分和修复建议"
     },
-    "rubric": "识别优先级断裂和孤儿主张。检测实验设计阶段引入的新方向是否合理。给出一致性评分。",
+    "rubric": "只要答案明确识别 P1 最高优先级丢失，并指出 Decoder-only 是问题分析未支持的新方向，就应给 >=0.5；还应给出一致性评分和修复建议。重点评估优先级断裂、孤儿主张和跨阶段覆盖关系。",
     "rubric_dimensions": [
       "cross_stage_consistency",
       "priority_tracking",

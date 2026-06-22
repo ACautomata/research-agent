@@ -6,8 +6,8 @@
 # and runs one smoke turn. Every benchmark's env.sh runs after this.
 #
 # Required env (set by CI workflow or by the user for local runs):
-#   MINIMAX_API_KEY         -- LLM provider key (fail-fast if missing)
-#   MINIMAX_BASE_URL        -- optional, defaults to https://api.minimaxi.com
+#   MINIMAX_API_KEY or LLM_API_KEY  -- LLM provider key (fail-fast if missing)
+#   MINIMAX_BASE_URL or LLM_BASE_URL -- optional, defaults to https://api.minimaxi.com
 #   BENCH_RUN_ID            -- used as the session key prefix and as the compose project name
 #   BENCH_COMPOSE_FILE      -- optional, defaults to docker/docker-compose.bench.yml
 #   BENCH_OPENCLAW_IMAGE    -- optional, overrides the image tag
@@ -27,11 +27,29 @@ COMPOSE_PROJECT="openclaw-bench-${RUN_ID}"
 log() { printf '\n[env_setup] %s\n' "$*"; }
 die() { printf '\n[env_setup][FATAL] %s\n' "$*" >&2; exit 1; }
 
-# 0. Secrets check
-if [[ -z "${MINIMAX_API_KEY:-}" ]]; then
-  die "MINIMAX_API_KEY is not set. Add it as a GitHub Actions secret, then re-run."
+# 0. Secrets check — support both MINIMAX_API_KEY and LLM_API_KEY for
+#    pull_request_target compatibility (the workflow file comes from the
+#    base branch, but env_setup.sh is from the PR fork).
+BENCH_API_KEY=""
+BENCH_API_KEY_VAR=""
+if [[ -n "${MINIMAX_API_KEY:-}" ]]; then
+  BENCH_API_KEY="${MINIMAX_API_KEY}"
+  BENCH_API_KEY_VAR="MINIMAX_API_KEY"
+elif [[ -n "${LLM_API_KEY:-}" ]]; then
+  BENCH_API_KEY="${LLM_API_KEY}"
+  BENCH_API_KEY_VAR="LLM_API_KEY"
+else
+  die "Neither MINIMAX_API_KEY nor LLM_API_KEY is set. Add one as a GitHub Actions secret, then re-run."
 fi
-: "${MINIMAX_BASE_URL:=https://api.minimaxi.com}"
+
+BENCH_BASE_URL=""
+if [[ -n "${MINIMAX_BASE_URL:-}" ]]; then
+  BENCH_BASE_URL="${MINIMAX_BASE_URL}"
+elif [[ -n "${LLM_BASE_URL:-}" ]]; then
+  BENCH_BASE_URL="${LLM_BASE_URL}"
+else
+  BENCH_BASE_URL="https://api.minimaxi.com"
+fi
 
 # 1. Build a temporary .env the compose file can read.
 ENV_DIR="${ROOT}/.bench-runtime"
@@ -52,7 +70,7 @@ SYNC_EXTENSIONS_ON_START=false
 SYNC_MODEL_CONFIG=false
 MODEL_ID=minimax/MiniMax-M2.7
 PRIMARY_MODEL=minimax/MiniMax-M2.7
-BASE_URL=${MINIMAX_BASE_URL}
+BASE_URL=${BENCH_BASE_URL}
 API_PROTOCOL=anthropic
 CONTEXT_WINDOW=200000
 MAX_TOKENS=8192
@@ -88,7 +106,7 @@ cat >"${ENV_DIR}/openclaw-data/openclaw.json" <<'PRESEEDEOF'
 }
 PRESEEDEOF
 # We can't set the apiKey until the container is running (the container
-# env provides MINIMAX_API_KEY). For now we use a placeholder; the SecretRef
+# env provides the API key). For now we use a placeholder; the SecretRef
 # patch in bench_reapply_setup replaces it after docker compose.
 
 # 2b. Pull the image (idempotent). Use docker hub mirror if available.
@@ -114,6 +132,12 @@ set -a
 # shellcheck disable=SC1090
 . "${ENV_FILE}"
 set +a
+# Export both API key names so docker compose variable substitution works
+# regardless of which name the compose file references.
+export MINIMAX_API_KEY="${BENCH_API_KEY}"
+export LLM_API_KEY="${BENCH_API_KEY}"
+export MINIMAX_BASE_URL="${BENCH_BASE_URL}"
+export LLM_BASE_URL="${BENCH_BASE_URL}"
 # Allow the data dir to be overridden by the .env file (it is written there),
 # but fall back to a host-local path that we create ourselves.
 : "${OPENCLAW_DATA_DIR:=${ENV_DIR}/openclaw-data}"
@@ -164,12 +188,13 @@ bench_reapply_setup() {
   echo "[bench_reapply_setup] chown /home/node/.openclaw -> 1000:1000"
   docker exec "${container}" chown -R 1000:1000 /home/node/.openclaw || true
   echo "[bench_reapply_setup] patching openclaw.json (SecretRef)"
-  docker exec "${container}" python3 -c '
-import json, pathlib
+  docker exec -e "BENCH_API_KEY_VAR=${BENCH_API_KEY_VAR}" "${container}" python3 -c '
+import json, os, pathlib
 p = pathlib.Path("/home/node/.openclaw/openclaw.json")
 data = json.loads(p.read_text(encoding="utf-8"))
 prov = data.setdefault("models", {}).setdefault("providers", {}).setdefault("minimax", {})
-prov["apiKey"] = {"source": "env", "provider": "default", "id": "MINIMAX_API_KEY"}
+api_key_var = os.environ.get("BENCH_API_KEY_VAR", "MINIMAX_API_KEY")
+prov["apiKey"] = {"source": "env", "provider": "default", "id": api_key_var}
 # Docker image upgrade: container init.sh writes models.providers.default
 # with baseUrl from env vars. When it has no models, OpenClaw rejects it.
 # Remove it so the minimax provider is used directly.
@@ -186,7 +211,7 @@ defaults["elevatedDefault"] = "full"
 tools = data.setdefault("tools", {})
 tools.setdefault("exec", {})["mode"] = "full"
 p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-print("patched models.providers.minimax.apiKey -> SecretRef(MINIMAX_API_KEY)")
+print(f"patched models.providers.minimax.apiKey -> SecretRef({api_key_var})")
 print("patched agents.defaults.sandbox.mode -> off")
 print("patched agents.defaults.elevatedDefault -> full")
 print("patched tools.exec.mode -> full (no-approval)")
@@ -305,11 +330,15 @@ bench_reapply_setup() {
   docker exec "\${container}" chown -R 1000:1000 /home/node/.openclaw || true
   echo "[bench_reapply_setup] patching openclaw.json (SecretRef)"
   docker exec "\${container}" python3 -c '
-import json, pathlib
+import json, os, pathlib
 p = pathlib.Path("/home/node/.openclaw/openclaw.json")
 data = json.loads(p.read_text(encoding="utf-8"))
 prov = data.setdefault("models", {}).setdefault("providers", {}).setdefault("minimax", {})
-prov["apiKey"] = {"source": "env", "provider": "default", "id": "MINIMAX_API_KEY"}
+# Try both env var names at runtime (the container may have either one)
+api_key_var = "MINIMAX_API_KEY"
+if os.environ.get("LLM_API_KEY") and not os.environ.get("MINIMAX_API_KEY"):
+    api_key_var = "LLM_API_KEY"
+prov["apiKey"] = {"source": "env", "provider": "default", "id": api_key_var}
 default_prov = data.get("models", {}).get("providers", {}).pop("default", None)
 if default_prov is not None:
     print("removed models.providers.default overlay (not needed for bench)")
@@ -323,7 +352,7 @@ defaults["elevatedDefault"] = "full"
 tools = data.setdefault("tools", {})
 tools.setdefault("exec", {})["mode"] = "full"
 p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-print("patched models.providers.minimax.apiKey -> SecretRef(MINIMAX_API_KEY)")
+print(f"patched models.providers.minimax.apiKey -> SecretRef({api_key_var})")
 print("patched agents.defaults.sandbox.mode -> off")
 print("patched agents.defaults.elevatedDefault -> full")
 print("patched tools.exec.mode -> full (no-approval)")
@@ -373,6 +402,17 @@ bench_force_recreate() {
   # shellcheck disable=SC1090
   . "\${BENCH_COMPOSE_ENV_FILE}"
   set +a
+  # Export both API key names so compose substitution works with either.
+  if [ -n "\${MINIMAX_API_KEY:-}" ]; then
+    export LLM_API_KEY="\${MINIMAX_API_KEY}"
+  elif [ -n "\${LLM_API_KEY:-}" ]; then
+    export MINIMAX_API_KEY="\${LLM_API_KEY}"
+  fi
+  if [ -n "\${MINIMAX_BASE_URL:-}" ]; then
+    export LLM_BASE_URL="\${MINIMAX_BASE_URL}"
+  elif [ -n "\${LLM_BASE_URL:-}" ]; then
+    export MINIMAX_BASE_URL="\${LLM_BASE_URL}"
+  fi
   docker compose --project-name "\${BENCH_COMPOSE_PROJECT}" \
       -f "\${compose_file}" --env-file "\${BENCH_COMPOSE_ENV_FILE}" \
       up -d --force-recreate openclaw-bench

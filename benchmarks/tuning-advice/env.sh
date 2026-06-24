@@ -7,4 +7,3 @@ set -euo pipefail
 : "${BENCH_RUN_ID:=local}"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-. "${HERE}/_env_shared.sh" 2>/dev/null || true

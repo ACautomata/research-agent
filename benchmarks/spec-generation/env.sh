@@ -9,5 +9,4 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
-# Delegate to shared env.
-. "${HERE}/_env_shared.sh" 2>/dev/null || true
+

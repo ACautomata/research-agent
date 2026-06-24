@@ -107,7 +107,7 @@ def repair_container_permissions(container: str) -> None:
     script = r'''
 set -e
 : "${BENCH_MOUNT:=/home/node/.openclaw}"
-for agent_id in main ingest curate extract critic design spec audit ideate judge; do
+for agent_id in main ingest curate extract critic design spec tuning optimizer audit ideate judge; do
   mkdir -p "${BENCH_MOUNT}/agents/${agent_id}/sessions"
 done
 for path in \

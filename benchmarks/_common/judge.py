@@ -44,13 +44,28 @@ def _extract_must_contain(gold: Any) -> list[str]:
     return []
 
 
+def _extract_must_not_contain(gold: Any) -> list[str]:
+    """Pull a flat list of forbidden tokens out of a gold_answer.
+
+    Recognized shapes:
+      - object: {"must_not_contain": ["Term1", ...]}
+    """
+    if not isinstance(gold, dict):
+        return []
+    out = list(gold.get("must_not_contain") or [])
+    return [str(t).lower() for t in out if str(t).strip()]
+
+
 def judge_with_rules(answer: str, qa: dict) -> dict:
     """Score an answer against qa.gold_answer with simple keyword coverage.
 
-    Score = covered / required (0 if no requirements). Pass when score >= qa.pass_threshold.
+    Score = covered / required (0 if no requirements), minus penalty for
+    must_not_contain violations. Pass when score >= qa.pass_threshold.
     """
     required = _extract_must_contain(qa.get("gold_answer"))
-    if not required:
+    forbidden = _extract_must_not_contain(qa.get("gold_answer"))
+
+    if not required and not forbidden:
         # No gold answer means we can only do a soft pass: not-empty + length sanity.
         text = (answer or "").strip()
         if not text:
@@ -60,14 +75,35 @@ def judge_with_rules(answer: str, qa: dict) -> dict:
                 "rationale": f"no gold_answer; scored on length={len(text)}"}
 
     text = (answer or "").lower()
+
+    # Positive scoring: required keywords
     missing = [r for r in required if r.lower() not in text]
     covered = len(required) - len(missing)
-    score = covered / len(required)
+    score = covered / len(required) if required else 1.0
+
+    # Negative scoring: forbidden keywords
+    violations = [f for f in forbidden if f in text]
+    if violations:
+        # Each violation reduces score by (1 / len(required)) equivalent weight,
+        # or 0.15 if no required keywords exist, capped so score >= 0.
+        penalty = len(violations) * (1.0 / max(len(required), 1) if required else 0.15)
+        score = max(0.0, score - penalty)
+
+    details = []
+    if missing:
+        details.append(f"missing={missing[:5]}")
+    if violations:
+        details.append(f"forbidden_hit={violations[:5]}")
+    rationale = f"covered {covered}/{len(required)}" if required else "no must_contain"
+    if details:
+        rationale += "; " + "; ".join(details)
+
     return {
         "score": round(score, 4),
         "pass": score >= qa.get("pass_threshold", 0.5),
-        "rationale": f"covered {covered}/{len(required)}; missing={missing[:5]}",
-        "missing": missing,
+        "rationale": rationale,
+        "missing": missing if missing else None,
+        "forbidden_violations": violations if violations else None,
     }
 
 

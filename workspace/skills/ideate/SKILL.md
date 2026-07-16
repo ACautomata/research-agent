@@ -1,6 +1,6 @@
 ---
 name: ideate
-description: Generate evidence-grounded, comparable, verifiable research idea cards from papers, wiki context, experiment logs, and constraints. Each idea anchors to a named pain point. Triggers: 生成 idea, brainstorm ideas, research ideas, 研究思路, 研究方向, idea 生成.
+description: Generate evidence-grounded research idea cards; each anchors to a named pain point. Triggers: 生成 idea, brainstorm ideas, research ideas, 研究思路, 研究方向, idea 生成.
 ---
 
 # ideate — 研究 idea 生成

@@ -1,6 +1,6 @@
 ---
 name: critic
-description: Analyze a paper from a reviewer's perspective — find problems, weak or over-claimed contributions, and research gaps, outputting a structured §0–§7 analysis. Stands alone (no orchestrator wraps it). Triggers: 问题分析, 找论文弱点, 审稿式分析, critic, reviewer critique, 审稿质疑.
+description: Analyze a paper from a reviewer's perspective — find problems, weak claims, research gaps. Stands alone (no orchestrator wraps it). Triggers: 问题分析, 找论文弱点, 审稿式分析, critic, reviewer critique, 审稿质疑.
 ---
 
 # critic — 审稿式问题与主张分析（独立 predicate）

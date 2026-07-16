@@ -1,6 +1,6 @@
 ---
 name: audit
-description: Audit the quality of analysis-chain outputs (extract / critic / design / spec) for structure completeness, stage-boundary adherence, and cross-stage consistency. Read-only assessment. Triggers: 质量审计, audit, 质量评估, 流水线审计.
+description: Audit the quality of analysis-chain outputs (extract/critic/design/spec) — read-only. Triggers: 质量审计, audit, 质量评估, 流水线审计.
 ---
 
 # audit — 流水线产出质量审计

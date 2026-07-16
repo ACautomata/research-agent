@@ -1,6 +1,6 @@
 ---
 name: spec
-description: Translate validation experiment designs (from design's output) into a minimal-invasive, executable claude-code task prompt. Triggers: 生成任务提示词, spec, codex 提示词, claude-code task, 实现规格.
+description: Translate validation designs (from design's output) into a claude-code task prompt. Triggers: 生成任务提示词, spec, codex 提示词, claude-code task, 实现规格.
 ---
 
 # spec — claude-code 验证任务提示词生成

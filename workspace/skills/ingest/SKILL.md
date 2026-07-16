@@ -1,6 +1,6 @@
 ---
 name: ingest
-description: Ingest a paper PDF into the research wiki as a structured, evidence-traceable paper page following the 11-section template. Triggers: 入库, ingest paper, add to wiki, 文献笔记, 整理这篇论文.
+description: Ingest a paper PDF into the wiki as an evidence-traceable paper page. Triggers: 入库, ingest paper, add to wiki, 文献笔记, 整理这篇论文.
 ---
 
 # ingest — 论文 PDF → 结构化 wiki 页面
@@ -22,8 +22,6 @@ description: Ingest a paper PDF into the research wiki as a structured, evidence
 - Raw sources 不可变；不修改 `raw/` 下原始文件
 - Wiki 受证据约束，不发明不存在的知识；每条持久 claim 追溯到论文页章节和原始来源
 - 区分证据等级：`abstract-only` / `skimmed` / `full-paper` / `reproduced`
-- 数量化：不说"显著优于 SOTA"，说具体数字
-- 更新旧页面优先于创建新页面
 
 ## 语言
 

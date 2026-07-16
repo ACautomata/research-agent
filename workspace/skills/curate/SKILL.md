@@ -1,6 +1,6 @@
 ---
 name: curate
-description: Curate the research wiki — quality linting, metadata fixing, cross-paper comparison, and literature queries grounded in existing wiki pages. Triggers: 文献查询, 对比论文, 跨论文比较, wiki lint, 文献检索, literature query, compare papers, cross-paper.
+description: Curate the research wiki — lint, compare papers, answer literature queries. Triggers: 文献查询, 对比论文, 跨论文比较, wiki lint, 文献检索, literature query, compare papers, cross-paper.
 ---
 
 # curate — wiki 策展、质量 lint、跨论文比较、文献查询

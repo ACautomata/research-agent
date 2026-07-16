@@ -1,6 +1,6 @@
 ---
 name: design
-description: Design small, controllable, executable validation experiments for a paper's identified problems (from critic's output), outputting a 10-section design doc. Triggers: 验证实验设计, design validation experiments, 设计验证实验.
+description: Design small, controllable validation experiments for a paper's identified problems (from critic's output). Triggers: 验证实验设计, design validation experiments, 设计验证实验.
 ---
 
 # design — 验证实验设计

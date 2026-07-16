@@ -58,7 +58,7 @@ fi
 # OpenClaw tools resolve relative paths from the workspace root.
 log "linking repo benchmarks into workspace"
 bench_container_cli exec "${BENCH_CONTAINER}" bash -lc \
-  "for ws in workspace workspace/extract workspace/critic workspace/design workspace/spec workspace/audit; do
+  "for ws in workspace; do
      mkdir -p '${BENCH_MOUNT}/\${ws}'
      rm -f '${BENCH_MOUNT}/\${ws}/benchmarks'
      ln -s '${BENCH_MOUNT}/benchmarks' '${BENCH_MOUNT}/\${ws}/benchmarks'
@@ -67,6 +67,6 @@ bench_container_cli exec "${BENCH_CONTAINER}" bash -lc \
 # ── 3. Output directories ──────────────────────────────────────────
 log "ensuring output dirs"
 bench_container_cli exec "${BENCH_CONTAINER}" mkdir -p \
-  "${BENCH_MOUNT}/workspace/extract/outputs/bench-${BENCH_RUN_ID}"
+  "${BENCH_MOUNT}/workspace/outputs/bench-${BENCH_RUN_ID}"
 
 log "env ready"

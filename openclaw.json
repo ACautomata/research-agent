@@ -64,10 +64,10 @@
       "elevatedDefault": "full",
       "maxConcurrent": 4,
       "subagents": {
-        "delegationMode": "prefer",
+        "delegationMode": "suggest",
         "maxConcurrent": 8,
         "maxSpawnDepth": 1,
-        "allowAgents": ["ingest", "curate", "extract", "critic", "design", "spec", "audit", "ideate", "judge"]
+        "allowAgents": ["judge"]
       }
     },
     "list": [
@@ -75,52 +75,12 @@
         "id": "main",
         "name": "颖姗",
         "default": true,
-        "workspace": "~/.openclaw/workspace/main"
-      },
-      {
-        "id": "ingest",
-        "name": "Ingest",
-        "workspace": "~/.openclaw/workspace/ingest"
-      },
-      {
-        "id": "curate",
-        "name": "Curate",
-        "workspace": "~/.openclaw/workspace/curate"
-      },
-      {
-        "id": "extract",
-        "name": "Extract",
-        "workspace": "~/.openclaw/workspace/extract"
-      },
-      {
-        "id": "critic",
-        "name": "Critic",
-        "workspace": "~/.openclaw/workspace/critic"
-      },
-      {
-        "id": "design",
-        "name": "Design",
-        "workspace": "~/.openclaw/workspace/design"
-      },
-      {
-        "id": "spec",
-        "name": "Spec",
-        "workspace": "~/.openclaw/workspace/spec"
-      },
-      {
-        "id": "audit",
-        "name": "Audit",
-        "workspace": "~/.openclaw/workspace/audit"
-      },
-      {
-        "id": "ideate",
-        "name": "Ideate",
-        "workspace": "~/.openclaw/workspace/ideate"
+        "workspace": "~/.openclaw/workspace"
       },
       {
         "id": "judge",
         "name": "Judge",
-        "workspace": "~/.openclaw/workspace/judge"
+        "workspace": "~/.openclaw/judge"
       }
     ]
   },

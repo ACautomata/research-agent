@@ -15,7 +15,7 @@ if ! declare -F bench_container_cli >/dev/null; then
   }
 fi
 log "linking repo benchmarks into workspace"
-bench_container_cli exec "${BENCH_CONTAINER}" bash -lc   "for ws in workspace workspace/curate workspace/judge; do
+bench_container_cli exec "${BENCH_CONTAINER}" bash -lc   "for ws in workspace judge; do
      mkdir -p '${BENCH_MOUNT}/\${ws}'
      rm -f '${BENCH_MOUNT}/\${ws}/benchmarks'
      ln -s '${BENCH_MOUNT}/benchmarks' '${BENCH_MOUNT}/\${ws}/benchmarks'

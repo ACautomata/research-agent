@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # benchmarks/paper-ingest/env.sh
-# Stages a tiny test paper into the ingest workspace's raw/inbox.
+# Stages a tiny test paper into the workspace's raw/inbox.
 # qa.jsonl is read by run_bench.py on the host — no need to stage it.
 set -euo pipefail
 
@@ -26,7 +26,7 @@ if ! declare -F bench_container_cli >/dev/null; then
 fi
 
 # Stage a synthetic paper into the ingest inbox.
-TARGET="${BENCH_MOUNT}/workspace/ingest/raw/inbox/bench-${BENCH_RUN_ID}"
+TARGET="${BENCH_MOUNT}/workspace/raw/inbox/bench-${BENCH_RUN_ID}"
 log "staging inbox paper at ${TARGET}"
 bench_container_cli exec "${BENCH_CONTAINER}" mkdir -p "${TARGET}"
 

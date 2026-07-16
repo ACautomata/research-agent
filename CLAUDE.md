@@ -32,7 +32,7 @@ This repo follows OpenClaw's hub-and-spoke multi-agent pattern. The main agent (
 ## Key Configuration Details
 
 - **Gateway**: loopback-bound on port 18789, token auth via `${GATEWAY_TOKEN}`.
-- **Model**: Primary `minimax/MiniMax-M2.7`, fallback `minimax/MiniMax-M2.7-highspeed`. Provider auth uses `minimax-oauth` (handled by the minimax plugin).
+- **Model**: Primary `minimax/MiniMax-M3`, fallback `minimax/MiniMax-M3`. Provider auth uses `minimax-oauth` (handled by the minimax plugin).
 - **Channels**: Feishu configured with WebSocket mode, pairing DM policy, allowlist group policy. Requires `${FEISHU_APP_ID}` and `${FEISHU_APP_SECRET}` in `.env`.
 - **Memory**: QMD backend indexing `**/*.md` in workspace.
 - **TTS**: Edge TTS with `zh-CN-XiaoxiaoNeural`.

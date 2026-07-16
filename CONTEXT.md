@@ -31,3 +31,28 @@ _Avoid_: coordination skill、pipeline skill。
 **Reference（引用）**:
 orchestrator skill 在文本里点名某个 predicate skill，让 main 加载并执行它。是**文本约定，不是代码 import**——grill-with-docs（"Run /grilling, using /domain-modeling"）即此模式的工作实证。
 _Avoid_: import、depends_on、调用（skill 之间无函数调用，是 main 依文加载）。
+
+### Benchmark harness (ClawProBench fork)
+
+**ClawProBench**:
+本仓库 CI 用的确定性 benchmark harness（产品名；仓库名 `ClawResearchBench`）。fork 自 upstream，改造为门控指定 agent 而非按 model 新建临时 agent。代码 fork 在 `ClawResearchBench` 的 `fork/target-main` 分支，CI 经 `git clone` 钉定 commit，不进本仓库 git 树。
+
+**scenario**:
+ClawProBench 的评测单元（YAML），含 `prompt`/`tools`/`custom_check`/`workspace_seed_dir`/`timeout_seconds`/`pass_threshold`。研究场景 `signal_source=workspace_live`（从 agent workspace 产物取分）、`benchmark_status=incubating`、`benchmark_core=false`，不在任何 active profile，须 `--benchmark-status all` 才入选。
+
+**custom_check**:
+确定性评分脚本（`custom_checks/*.py`），从 agent workspace 产物取分，**不依赖 judge agent**。这是 fork 取代旧 `benchmarks/_common/judge.py`（spawn judge 评分）的根据。
+
+**profile**:
+命名场景切片--`core`/`intelligence`/`coverage`/`native`/`full`。本仓库 CI 跑 research 精选子集（`--benchmark-status all`），非泛化 model ranking。
+
+**target agent**:
+fork 后 CI 门控的指定 agent（默认 `main`/颖姗），复用其 workspace；区别于原样 ClawProBench 按 `--model` 新建的 `ocb6-<model>-<uuid>` 临时 agent。`--agent` 指定，`--model` 改 optional 并从 `openclaw.json` 自动读 main 的 model，result slug 用 `main`。
+
+**FinalScore / pass@3 / pass^3**:
+ClawProBench 评分指标。`pass@3` = trials=3 中至少 1 次通过；`pass^3` = 3 次全过；`FinalScore` 综合分（汇总 trials 与场景得分，见 `harness/scoring.py`）。需 trials≥3 才有语义。
+
+**isolated state**:
+ClawProBench 的 state 隔离机制（`_uses_isolated_state()`：target state ≠ 默认 `~/.openclaw` 时启用，触发 config/auth seed）。fork 在容器内跑颖姗真实 state（`/home/node/.openclaw`），隔离关闭，三个 seed 函数全 no-op，零污染--但 `_create_agent` 仍须无条件跳过（其首步 `agents delete --force` 会删 target agent）。
+
+_Avoid_: judge（benchmark 评分改由 custom_check 确定性完成，judge spawn 的唯一理由消失）、临时 agent（fork 不再新建）。

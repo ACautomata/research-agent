@@ -10,22 +10,17 @@ All changes are made via SSH to the remote server. Local clone is at `/Users/jun
 
 ## Architecture
 
-This repo follows OpenClaw's hub-and-spoke multi-agent pattern. The main agent (颖姗) is bound to messaging channels and delegates specialized tasks to sub-agents via `sessions_spawn`.
+This repo follows a **single main agent + two-layer skill** pattern. The main agent (颖姗) is bound to messaging channels and does all domain work itself using skills — it does not spawn producer agents. Cross-agent spawn is limited to `judge` (quality gate / benchmark scoring); batch/parallel orchestrators may spawn main's own isolated sub-sessions. See `CONTEXT.md` for the canonical vocabulary and `docs/adr/0001-single-main-agent-two-layer-skills.md` for the decision.
 
 - **openclaw.json** — Main gateway configuration. All secrets use `${ENV_VAR}` references resolved from `.env` (which is gitignored).
 - **agents/main/agent/models.json** — Custom model provider definitions (currently MiniMax Anthropic-compatible endpoints).
 - **canvas/index.html** — OpenClaw Canvas web UI.
-- **workspace/** — Main agent (颖姗) working directory. Contains SOUL.md, AGENTS.md, IDENTITY.md, USER.md, TOOLS.md, MEMORY.md, HEARTBEAT.md, DREAMS.md. Sub-agent workspaces live under `workspace/<agentId>/`. See [docs](https://docs.openclaw.ai/concepts/agent-workspace).
-  - `workspace/ingest/` — Ingest agent: Paper PDF-to-wiki ingestion pipeline.
-  - `workspace/curate/` — Curate agent: Wiki curation, quality linting, cross-paper comparison, literature queries.
-  - `workspace/extract/` — Extract agent: Deep experiment extraction from papers.
-  - `workspace/critic/` — Critic agent: Problem and claim analysis from reviewer perspective.
-  - `workspace/design/` — Design agent: Validation experiment design for paper claims.
-  - `workspace/spec/` — Spec agent: Implementation specification and task prompt generation.
-  - `workspace/audit/` — Audit agent: Pipeline output quality auditing.
-  - `workspace/ideate/` — Ideate agent: Research idea generation, opportunity synthesis, deduplication.
-  - `workspace/judge/` — Judge agent: Quality gate review and benchmark judging.
-- Main agent skills at `skills/<name>/` directly coordinate subagents for user-facing scenarios: `skills/paper-pipeline/`, `skills/paper-ingest/`, `skills/literature-query/`, `skills/brainstorm/`, `skills/benchmark/`.
+- **workspace/** — Main agent (颖姗) working directory (flattened — no per-agent subdirectories). Contains persona files (SOUL.md, AGENTS.md, IDENTITY.md, USER.md, TOOLS.md, MEMORY.md, HEARTBEAT.md, DREAMS.md) and `skills/`. See [docs](https://docs.openclaw.ai/concepts/agent-workspace).
+- **workspace/skills/** — Two-layer skills owned by main:
+  - **Predicate skills (8, atomic capabilities)**: `ingest`, `curate`, `extract`, `critic`, `design`, `spec`, `audit`, `ideate`. Each is the single source of truth for one research verb.
+  - **Orchestrator skills (8, scenario composition)**: `paper-ingest` (ingest→curate), `paper-read` (ingest→extract), `paper-validate` (design→spec), `paper-audit` (audit), `literature-query` (curate), `brainstorm` (curate→ideate), `benchmark` (spawn judge), `paper-batch-ingest` (spawn self per paper). They reference predicates in text.
+  - `critic` is standalone (no orchestrator wraps it); "完整分析" = main chains `paper-read` → `critic` → `paper-validate` → `paper-audit` directly.
+- **judge/** — Judge workspace (sibling of `workspace/`, outside it so main stays flat). Quality gate + benchmark scoring.
 - **benchmarks/** — Developer benchmarks and evaluation datasets for testing agent capabilities.
 - **docs/** — Local snapshots of OpenClaw design references (Lobster, Task Flow, Hooks, Standing Orders, Commitments, Automation overview). **Read these before designing any new feature** — start with `docs/README.md` for the "designing X? read Y" index. The canonical source is <https://docs.openclaw.ai/>; refresh the local files when upstream changes.
 
@@ -72,46 +67,46 @@ openclaw pairing approve feishu <CODE>
 
 ### Workspace Naming
 
-Workspace directories follow the nested convention `workspace/<agentId>`:
+There are exactly two workspaces:
 
-- **Main agent**: `workspace/` (no suffix — the default agent)
-- **Sub-agents**: `workspace/<agentId>/` where `<agentId>` matches the `id` field in `openclaw.json` → `agents.list[]`
+- **Main agent**: `workspace/` (flattened — persona files and `skills/` live directly here, no per-agent subdirectories). Maps to `~/.openclaw/workspace`.
+- **Judge**: `judge/` (sibling of `workspace/`, outside it so main stays flat). Maps to `~/.openclaw/judge`.
 
-Examples: `workspace/ingest/`, `workspace/curate/`, `workspace/extract/`, `workspace/critic/`, `workspace/design/`, `workspace/spec/`, `workspace/audit/`, `workspace/ideate/`, `workspace/judge/`.
-
-When adding a new agent, create the workspace directory, register it in `openclaw.json` under `agents.list` with a matching `workspace` path, and add the workspace to `.gitignore`'s runtime-state exceptions.
+Both `id` fields match `openclaw.json` → `agents.list[]` (which contains only `main` and `judge`). Producer capabilities (ingest/curate/extract/critic/design/spec/audit/ideate) are **predicate skills** under `workspace/skills/`, not separate workspaces.
 
 ### Agent Design Pattern
 
-The system uses a **main agent → main agent skills → subagent → subagent skills** delegation chain. The former depth-1 coordinator agent has been removed; main now directly coordinates worker subagents.
+The system uses a **single main agent + two-layer skills** model. Main does all domain work itself; cross-agent spawn is limited to `judge`, while batch/parallel orchestrators may spawn main's own isolated sub-sessions.
 
-1. **Main agent (颖姗)** — bound to messaging channels, handles user-facing conversation, routing, direct worker dispatch, and synthesis.
-2. **Main agent skills** — live at `workspace/main/skills/<skill-name>/`. Each skill coordinates one or more subagents into a user-facing workflow. There are 5 core coordination skills:
-   - `skills/paper-ingest/` — coordinates `ingest` and `curate` for paper PDF-to-wiki pipeline.
-   - `skills/paper-pipeline/` — coordinates `extract`, `critic`, `design`, `spec`, and `audit` for the full paper analysis pipeline.
-   - `skills/literature-query/` — coordinates `curate` for cross-paper queries and comparisons.
-   - `skills/brainstorm/` — coordinates `curate` and `ideate` for research idea generation.
-   - `skills/benchmark/` — coordinates `judge` for benchmark execution and evaluation.
-3. **Subagents** — each registered in `openclaw.json` under `agents.list`, spawned by the main agent via `sessions_spawn`. Each subagent owns a **single domain of responsibility**:
-   - `ingest` — Paper PDF→wiki ingestion pipeline.
-   - `curate` — Wiki curation, quality linting, cross-paper comparison, literature queries.
-   - `extract` — Deep experiment extraction from papers.
-   - `critic` — Problem and claim analysis from reviewer perspective.
-   - `design` — Validation experiment design for paper claims.
-   - `spec` — Implementation specification and task prompt generation.
-   - `audit` — Pipeline output quality auditing.
-   - `ideate` — Research idea generation, opportunity synthesis, deduplication.
-   - `judge` — Quality gate review and benchmark judging.
-4. **Subagent skills** — live at `workspace/<agentId>/skills/<skill-name>/`. These handle domain-specific subtasks within the subagent's responsibility scope.
+1. **Main agent (颖姗)** — bound to messaging channels, handles user-facing conversation, runs skills directly, and spawns `judge` only for quality gating / benchmark scoring.
+2. **Predicate skills** — live at `workspace/skills/<predicate>/`. Each is one atomic, reusable research capability (single source of truth for its task, inputs, output shape, completion gate):
+   - `ingest` — Paper PDF→wiki page.
+   - `curate` — Wiki linting, cross-paper comparison, literature queries.
+   - `extract` — Deep experiment extraction (12-section).
+   - `critic` — Reviewer-perspective problem analysis (standalone, no orchestrator wraps it).
+   - `design` — Validation experiment design (10-section).
+   - `spec` — claude-code task prompt generation.
+   - `audit` — Analysis-chain quality audit.
+   - `ideate` — Research idea card generation.
+3. **Orchestrator skills** — live at `workspace/skills/<orchestrator>/`. Compose predicates by **reference** (textual: "run the `ingest` skill"); main loads and runs the referenced predicate. There are 8:
+   - `paper-ingest` — ingest→curate.
+   - `paper-read` — ingest→extract.
+   - `paper-validate` — design→spec (requires `critic` output already in wiki).
+   - `paper-audit` — audit.
+   - `literature-query` — curate.
+   - `brainstorm` — curate→ideate.
+   - `benchmark` — main runs QA, spawns `judge` to score.
+   - `paper-batch-ingest` — per paper, spawns a self subagent (isolated context) to run `ingest`.
+4. **Full analysis** — no router skill. Main directly chains `paper-read` → `critic` → `paper-validate` → `paper-audit`, persisting each stage to the wiki.
 
 **Constraints:**
 
-- **Single minimal function per subagent.** Each subagent implements exactly one atomic capability. If a subagent grows to handle multiple distinct functions, split it. The litmus test: can you describe what the subagent does in a single verb phrase? If not, it's too broad.
-- Main agent skills coordinate subagents. They should not reimplement logic that belongs in a subagent skill.
-- Subagent skills should be self-contained and produce outputs that downstream stages or other agents can consume.
-- The `agents.defaults.subagents.allowAgents` list in `openclaw.json` controls which subagents the main agent may spawn. Update it when adding new subagents.
-- Main agent's AGENTS.md and TOOLS.md define how subagents are invoked. Keep coordination logic in main agent skills (`skills/<skill-name>/`), not scattered across workspace files.
-- **Subagent output delivery: inline reply only.** Subagent 产出只能走两条路：(1) 写入 wiki（通过 `wiki_apply` 等 wiki 工具），(2) 在 reply 中直接返回完整内容给调用者。**禁止**将产出写入文件系统（`outputs/`、`idea-runs/` 等目录）让其他 agent 通过路径去找。调用者（main）负责将上游 reply 内容嵌入下游 task 参数中传递。每个 subagent 的 TOOLS.md 应限制写入权限为 `memory/` 过程记录，产物通过 inline reply 返回。
+- **Single minimal function per predicate.** Each predicate implements exactly one atomic capability. Litmus test: can you describe it in a single verb phrase? If not, split it.
+- Orchestrators are thin: they reference predicates and define order/preconditions, never reimplement predicate logic.
+- Predicates remain model-invoked (keep a `description`) so orchestrators can reference them and each can fire independently when the operator asks for a single verb.
+- The `agents.defaults.subagents.allowAgents` list in `openclaw.json` is `["judge"]` — main may cross-agent spawn only judge. spawn self (`sessions_spawn` without `agentId`, isolated context) is the default capability and needs no allowAgents entry; use it for batch/parallel work (e.g. `paper-batch-ingest`).
+- `delegationMode` is `suggest` (not `prefer`) so main is not pushed to delegate; real enforcement is `allowAgents`.
+- **Delivery rule (one standing order in `workspace/AGENTS.md`):** a predicate writes its full output to the wiki (via `wiki_apply`) and returns the content in its reply. Main is the single context: within one orchestrator, full-inline passing is fine; cross-orchestrator handoff goes through the wiki. Producer skills never write outputs to the filesystem for other agents to find by path.
 
 ### Benchmark CI 流程
 
@@ -135,15 +130,14 @@ GitHub 仓库必须配置以下 secret（你最后手动加）：
 | `LLM_MODEL` | 否 | 默认 `minimax/MiniMax-M2.7` |
 | `BENCH_BASE_RESULTS_JSON` | 否 | 上次 main 跑出的 summary（base64 字符串），用于 PR 评论做 delta 对比 |
 
-### Adding New Agents
+### Adding New Skills
 
-When creating a new subagent:
+The system has exactly two agents (`main`, `judge`). New capabilities are **skills**, not agents:
 
-1. Add an entry to `agents.list` in `openclaw.json` with `id`, `name`, and `workspace` path.
-2. Create `workspace/<agentId>/` with standard workspace files (SOUL.md, AGENTS.md, USER.md, TOOLS.md, MEMORY.md, HEARTBEAT.md, DREAMS.md).
-3. Add the agent ID to `agents.defaults.subagents.allowAgents`.
-4. Write skills under `workspace/<agentId>/skills/` following the single-responsibility principle.
-5. If the main agent needs to coordinate this subagent, create or update a main agent skill under `skills/`.
+1. **New predicate** — create `workspace/skills/<verb>/SKILL.md` with `name`, `description` (model-invoked triggers), Mission, scope (do/don't), inputs, output structure, completion gate. Keep it the single source of truth for one verb.
+2. **New orchestrator** — create `workspace/skills/<scenario>/SKILL.md` that references predicates by name and defines order/preconditions. Keep it thin.
+3. If a scenario needs independent quality gating, spawn `judge` (already in `allowAgents`).
+4. Adding a new **agent** is rare and reserved for hard external requirements (like `judge` for CI-mandated independent scoring); update `openclaw.json` `agents.list`, create the workspace, and add to `allowAgents`.
 
 ## PR Rules
 

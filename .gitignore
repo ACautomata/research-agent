@@ -46,14 +46,20 @@ openclaw.json.last-good
 # === Workspace runtime ===
 workspace/.openclaw/
 
-# === Subagent workspace runtime state (tracked: SOUL.md, AGENTS.md, TOOLS.md, IDENTITY.md, USER.md, MEMORY.md, HEARTBEAT.md, DREAMS.md, skills/*) ===
-workspace/*/memory/
-workspace/*/state/
-workspace/*/qmd/
-workspace/*/logs/
-workspace/*/tasks/
-workspace/ideate/idea-runs/
-workspace/ideate/docs/
+# === Main workspace runtime state (tracked: SOUL.md, AGENTS.md, TOOLS.md, IDENTITY.md, USER.md, MEMORY.md, HEARTBEAT.md, DREAMS.md, skills/*) ===
+workspace/memory/
+workspace/state/
+workspace/qmd/
+workspace/logs/
+workspace/tasks/
+
+# === Judge workspace runtime state (tracked: AGENTS.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, MEMORY.md, HEARTBEAT.md, DREAMS.md, skills/*) ===
+judge/memory/
+judge/state/
+judge/qmd/
+judge/logs/
+judge/tasks/
+judge/sessions/
 
 # === OS / editor ===
 .DS_Store

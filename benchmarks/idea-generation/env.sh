@@ -25,8 +25,8 @@ if ! declare -F bench_container_cli >/dev/null; then
   }
 fi
 
-# Stage tiny test papers into the ideate workspace so the agent can find them.
-TARGET="${BENCH_MOUNT}/workspace/ideate/bench-fixtures/bench-${BENCH_RUN_ID}/paper"
+# Stage tiny test papers into the workspace paper/ dir so the agent can find them.
+TARGET="${BENCH_MOUNT}/workspace/paper"
 log "staging paper fixture at ${TARGET}"
 bench_container_cli exec "${BENCH_CONTAINER}" mkdir -p "${TARGET}"
 

@@ -45,13 +45,13 @@
   "agents": {
     "defaults": {
       "model": {
-        "primary": "minimax/MiniMax-M2.7",
+        "primary": "minimax/MiniMax-M3",
         "fallbacks": [
-          "minimax/MiniMax-M2.7-highspeed"
+          "minimax/MiniMax-M3"
         ]
       },
       "models": {
-        "minimax/MiniMax-M2.7": {
+        "minimax/MiniMax-M3": {
           "alias": "Minimax"
         }
       },
@@ -342,8 +342,8 @@
         "baseUrl": "https://api.minimaxi.com/anthropic",
         "models": [
           {
-            "id": "MiniMax-M2.7",
-            "name": "MiniMax M2.7",
+            "id": "MiniMax-M3",
+            "name": "MiniMax M3",
             "reasoning": true,
             "input": [
               "text",
@@ -355,8 +355,8 @@
               "cacheRead": 0.06,
               "cacheWrite": 0.375
             },
-            "contextWindow": 204800,
-            "maxTokens": 131072
+            "contextWindow": 1048576,
+            "maxTokens": 524288
           }
         ],
         "api": "anthropic-messages",

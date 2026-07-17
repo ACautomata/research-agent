@@ -29,3 +29,7 @@ status: accepted
 批量 / 并行场景可用 `sessions_spawn` 启动 main 自己的 isolated 子 session。例如 `paper-batch-ingest` 对每篇论文 spawn 一个 self subagent，在各自 context 里运行 `ingest` predicate。
 
 这不恢复 producer agent：子 session 仍是 main 身份、共享 main workspace 与 predicate skills；`agents.list` 仍只有 main + judge，cross-agent `allowAgents` 仍只有 judge。它只把 OpenClaw 的同 agent context 隔离能力用于天然可并行的批处理。
+
+## Amendment: retire judge after ClawProBench fork (superseded by ADR-0002)
+
+benchmark CI 改用 [ClawProBench fork](./0002-clawprobench-fork-target-main.md) 的确定性 `custom_check` 评分，「仅因 benchmark CI 强制要求保留 judge」的前提消失。fork 跑通后删除 judge：`agents.list` 收敛为只剩 main，cross-agent `allowAgents` 清空。本文「仅保留 judge」的决策被 ADR-0002 supersede。

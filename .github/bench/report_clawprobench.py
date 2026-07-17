@@ -30,7 +30,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-MARKER = "<!-- openclaw-clawprobench-report -->"
+MARKER = os.environ.get(
+    "BENCH_COMMENT_MARKER", "<!-- openclaw-clawprobench-report -->"
+)
 
 
 def _load(path: Path) -> dict:
@@ -172,12 +174,28 @@ def post_comment(body: str) -> bool:
         return False
 
 
+def _load_base() -> dict | None:
+    """Resolve the base summary for delta comparison.
+
+    BENCH_BASE_SUMMARY may be either a file path OR a base64-encoded JSON
+    string (the latter is how it's stored as a repo secret per CLAUDE.md).
+    """
+    raw = os.environ.get("BENCH_BASE_SUMMARY")
+    if not raw:
+        return None
+    if Path(raw).exists():
+        return _load(Path(raw))
+    # Treat as base64-encoded JSON (the secret form).
+    try:
+        import base64
+        return json.loads(base64.b64decode(raw).decode("utf-8"))
+    except Exception:
+        return None
+
+
 def main() -> int:
     results_dir = Path(os.environ.get("BENCH_RESULTS_DIR", "bench-results"))
-    base_path = os.environ.get("BENCH_BASE_SUMMARY")
-    base = None
-    if base_path and Path(base_path).exists():
-        base = _load(Path(base_path))
+    base = _load_base()
     body, _ = render(results_dir, base)
     if not post_comment(body):
         print(body)

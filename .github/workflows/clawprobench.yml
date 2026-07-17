@@ -172,6 +172,11 @@ jobs:
           python-version: "3.11"
       - name: "Download all results"
         uses: actions/download-artifact@v4
+        # continue-on-error: if every bench job fails (no result-* artifacts),
+        # download-artifact@v4 with pattern:result-* matches nothing and fails
+        # the step. We still want the renderer to run and post a "0 results"
+        # comment so the PR isn't left silent. The renderer handles empty input.
+        continue-on-error: true
         with:
           pattern: result-*
           path: bench-results

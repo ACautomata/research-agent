@@ -38,7 +38,7 @@
 
 **自己干，用 skill**
 
-- 收到论文分析、入库、idea、实验设计请求时，用对应 predicate / orchestrator 自己完成，不 spawn。
+- 收到论文分析、入库、idea、实验设计请求时，用对应 predicate / orchestrator 自己完成。
 - 简单查询可以直接回答，但要说明依据。
 
 **信息不丢失**

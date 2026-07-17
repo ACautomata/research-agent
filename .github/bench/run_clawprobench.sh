@@ -59,7 +59,15 @@ export LLM_MODEL="minimax/MiniMax-M3"
 export LLM_BASE_URL="${LLM_BASE_URL:-https://api.minimaxi.com/anthropic}"
 export BENCH_LOCAL_ENV_FILE="/dev/null"   # /dev/null is not a regular file → env_setup skips sourcing
 
-# --- 2. bring up the container + sync repo + patch openclaw.json + wait ready ---
+# --- 2. bring up the container + sync repo + patch openclaw.json + wait ready.
+#        FIRST, delete any residual state/openclaw.sqlite from a prior run:
+#        the container's init.sh creates a fresh sqlite db on first boot. If a
+#        stale/corrupted db exists (e.g. from a crashed startup migration on
+#        macOS Docker Desktop virtiofs), the gateway fails with "disk I/O
+#        error" or "startup migrations already running". CI always starts
+#        clean (new runner), but local --keep-container reuse needs the sweep. ---
+rm -f "${ROOT}/.bench-runtime/openclaw-data/state/openclaw.sqlite" \
+       "${ROOT}/.bench-runtime/openclaw-data/state/openclaw.sqlite"-* 2>/dev/null || true
 BENCH_RUN_ID="${BENCH_RUN_ID:-clawpro-$$}"
 export BENCH_RUN_ID
 echo "[clawprobench] env_setup (run_id=${BENCH_RUN_ID}, scenario=${SCENARIO}, trials=${TRIALS})"
@@ -76,29 +84,53 @@ trap '${BENCH_KEEP_CONTAINER:+:} bench_teardown' EXIT
 # --- 5. health self-check (gateway status, NOT openclaw health) ---
 bench_container_cli exec "$BENCH_CONTAINER" openclaw gateway status >/dev/null
 
-# --- 5b. swap context engine to built-in `legacy` for the bench run.
-#        颖姗's production config pins plugins.slots.contextEngine=lossless-claw,
-#        but the bench image does NOT ship the lossless-claw extension
-#        (OPENCLAW_PLUGINS_ENABLED=false + installPath absent). At runtime the
-#        context engine fails to resolve -> "not registered" -> session error,
-#        aborting every trial in ~11s. We swap the in-container openclaw.json
-#        copy (host config is never touched) to the built-in `legacy` engine
-#        and disable the stale lossless-claw entry. This changes which context
-#        engine 颍姗 runs under in CI (not its skills/persona), so CI does not
-#        exercise lossless-claw - an accepted trade-off (see CLAUDE.md). ---
+# --- 5b. bench-container config patches (in-container openclaw.json copy;
+#        host config is never touched). Two patches, both required for 2026.7.1:
+#
+#        (a) context engine: 颖姗 pins plugins.slots.contextEngine=lossless-claw,
+#            but the bench image does NOT ship the lossless-claw extension
+#            (OPENCLAW_PLUGINS_ENABLED=false + installPath absent). At runtime
+#            the context engine fails "not registered" -> session error. Swap
+#            to the built-in `legacy` engine + disable the stale entry. CI does
+#            not exercise lossless-claw (accepted trade-off, see CLAUDE.md).
+#
+#        (b) channels: OpenClaw 2026.7.1 doctor auto-installs the feishu/discord
+#            plugins, after which a channel with enabled:true requires its
+#            SecretRef (FEISHU_APP_SECRET etc.) -> gateway fails to start with
+#            "required secrets are unavailable" in a bench container that has
+#            no channel creds. bench only runs `openclaw agent`, never channels,
+#            so disable every channel account. ---
 bench_container_cli exec "$BENCH_CONTAINER" python3 -c '
 import json, pathlib
 p = pathlib.Path("/home/node/.openclaw/openclaw.json")
 d = json.loads(p.read_text(encoding="utf-8"))
+
+# (a) context engine -> legacy
 slots = d.setdefault("plugins", {}).setdefault("slots", {})
-prev = slots.get("contextEngine")
+prev_ce = slots.get("contextEngine")
 slots["contextEngine"] = "legacy"
 entries = d["plugins"].setdefault("entries", {})
 lc = entries.get("lossless-claw")
 if isinstance(lc, dict):
     lc["enabled"] = False
+
+# (b) disable all channel accounts
+disabled = []
+channels = d.get("channels", {})
+if isinstance(channels, dict):
+    for ch_name, ch_cfg in channels.items():
+        if not isinstance(ch_cfg, dict):
+            continue
+        accs = ch_cfg.get("accounts", {})
+        if isinstance(accs, dict):
+            for acc_name, acc in accs.items():
+                if isinstance(acc, dict) and acc.get("enabled") is not None:
+                    acc["enabled"] = False
+                    disabled.append(f"{ch_name}/{acc_name}")
+
 p.write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-print(f"[clawprobench] contextEngine: {prev!r} -> legacy (lossless-claw disabled in bench)")
+print(f"[clawprobench] contextEngine: {prev_ce!r} -> legacy (lossless-claw disabled)")
+print(f"[clawprobench] channels disabled: {disabled or '(none present)'}")
 '
 
 # --- 6. post-patch hard assert: primary must be M3 (fail loud, not silent M2.7) ---

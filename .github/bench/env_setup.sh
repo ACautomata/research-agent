@@ -242,6 +242,24 @@ import json, os, pathlib
 p = pathlib.Path(os.environ["OPENCLAW_JSON_PATH"])
 data = json.loads(p.read_text(encoding="utf-8"))
 llm_model = os.environ.get("LLM_MODEL", "")
+
+# Disable every channel account before the gateway starts.  OpenClaw 2026.7.1
+# doctor auto-installs feishu/discord plugins; an enabled channel account
+# requires its SecretRef (FEISHU_APP_SECRET etc.) which the bench container
+# doesn't have -> "Gateway failed to start: required secrets are unavailable".
+# Bench only runs `openclaw agent`, never channels.
+ch_disabled = 0
+channels = data.get("channels", {})
+if isinstance(channels, dict):
+    for ch_name, ch_cfg in channels.items():
+        if not isinstance(ch_cfg, dict):
+            continue
+        accs = ch_cfg.get("accounts", {})
+        if isinstance(accs, dict):
+            for acc_name, acc in accs.items():
+                if isinstance(acc, dict) and acc.get("enabled") is not None:
+                    acc["enabled"] = False
+                    ch_disabled += 1
 if "/" not in llm_model:
     raise SystemExit(
         "LLM_MODEL must be in 'provider/model' form (e.g. minimax/MiniMax-M2.7), got: %r" % llm_model
@@ -282,6 +300,10 @@ print("patched agents.defaults.sandbox.mode -> off")
 print("patched agents.defaults.elevatedDefault -> full")
 print("patched tools.exec.mode -> full (no-approval)")
 print("patched tools.fs.workspaceOnly -> false")
+if ch_disabled:
+    print(f"disabled {ch_disabled} channel account(s)")
+else:
+    print("no channel accounts found to disable")
 PY
 }
 
@@ -319,6 +341,12 @@ bench_reapply_setup() {
     echo "[bench_reapply_setup] patching openclaw.json (SecretRef)"
     bench_patch_openclaw_json_file "${data_dir}/openclaw.json"
     chown 1000:1000 "${data_dir}/openclaw.json" 2>/dev/null || true
+    # On macOS Docker Desktop (virtiofs), the previous container boot may have
+    # left a corrupted state/openclaw.sqlite.  The re-apply will restart the
+    # container, so delete the stale db now so the gateway's fresh boot creates
+    # a clean one.  CI (Linux runners) never has a stale sqlite at this point
+    # because the container below was just built from scratch.
+    rm -f "${data_dir}/state/openclaw.sqlite" "${data_dir}/state/openclaw.sqlite"-* 2>/dev/null || true
     echo "[bench_reapply_setup] starting ${container} after host-side staging"
     bench_container_cli start "${container}" >/dev/null
     return 0
@@ -352,6 +380,21 @@ bench_reapply_setup() {
 import json, os, pathlib
 p = pathlib.Path("/home/node/.openclaw/openclaw.json")
 data = json.loads(p.read_text(encoding="utf-8"))
+
+# Disable channels (see the host-side patch above for the rationale).
+ch_disabled2 = 0
+channels = data.get("channels", {})
+if isinstance(channels, dict):
+    for ch_name, ch_cfg in channels.items():
+        if not isinstance(ch_cfg, dict):
+            continue
+        accs = ch_cfg.get("accounts", {})
+        if isinstance(accs, dict):
+            for acc_name, acc in accs.items():
+                if isinstance(acc, dict) and acc.get("enabled") is not None:
+                    acc["enabled"] = False
+                    ch_disabled2 += 1
+
 # Resolve target provider + model id from LLM_MODEL, following the
 # `provider/model` convention used by ~/.openclaw/openclaw.json: the prefix
 # "AA" of "AA/BB" becomes models.providers.AA and "BB" the model id.
@@ -408,10 +451,12 @@ print("patched tools.exec.mode -> full (no-approval)")
 bench_wait_ready() {
   local container="${1:-${BENCH_CONTAINER:-}}"
   [[ -n "${container}" ]] || { echo "[bench_wait_ready][FATAL] no container" >&2; return 64; }
+  local recovered=""
   echo "[bench_wait_ready] waiting for ${container} to come up and gateway to be ready"
   for i in $(seq 1 90); do
     if bench_is_running "${container}"; then
       if bench_logs_tail "${container}" 200 2>&1 | grep -qE 'http server listening|starting channels and sidecars|\[gateway\] ready|heartbeat.*started'; then
+        [[ -n "${recovered}" ]] && echo "[bench_wait_ready] ${container} ready after recovery at poll ${i}"
         echo "[bench_wait_ready] ${container} is up and gateway is ready after ${i} polls"
         return 0
       fi
@@ -420,6 +465,24 @@ bench_wait_ready() {
       running="$(bench_running_state "${container}")"
       case "${running}" in
         false\|exited|false\|dead|false\|stopped|false\|removing|missing\|missing)
+          # On macOS Docker Desktop (virtiofs), OpenClaw 2026.7.1 startup
+          # migrations can write a corrupted state/openclaw.sqlite on the bind
+          # mount. The container exits with "disk I/O error" / "Reason: disk
+          # I/O error".  One-shot recovery: delete the stale db on the host
+          # side and force-recreate the container, then resume polling.  CI
+          # (Linux runners) never hits this path; it's a local-mac safeguard.
+          if [[ -z "${recovered:-}" ]] && \
+             bench_logs_tail "${container}" 200 2>&1 | grep -qF 'disk I/O error'; then
+            echo "[bench_wait_ready] ${container} exited with disk I/O error; recovering (delete sqlite + recreate)" >&2
+            local data_dir="${BENCH_DATA_DIR:-}"
+            if [[ -n "${data_dir}" ]]; then
+              rm -f "${data_dir}/state/openclaw.sqlite" "${data_dir}/state/openclaw.sqlite"-* 2>/dev/null || true
+            fi
+            bench_runtime_up
+            container="${BENCH_CONTAINER:-${container}}"
+            recovered=1
+            continue
+          fi
           echo "[bench_wait_ready][FATAL] container ${container} state=${running}; dumping logs:" >&2
           bench_logs_tail "${container}" 200 >&2 || true
           return 1
@@ -493,6 +556,12 @@ GROUP_POLICY=disabled
 ALLOW_FROM=
 OPENCLAW_WORKSPACE_ROOT=/home/node/.openclaw
 OPENCLAW_PLUGINS_ENABLED=false
+# LLM provider creds for the gateway process (OpenClaw 2026.7.1 reads these
+# via compose's ${LLM_API_KEY}/${LLM_BASE_URL} interpolation; without them the
+# gateway starts with an empty provider key and every agent call 401s). The
+# SecretRef in openclaw.json resolves LLM_API_KEY from the process env at runtime.
+LLM_API_KEY=${LLM_API_KEY}
+LLM_BASE_URL=${LLM_BASE_URL}
 EOF
 mkdir -p "${BENCH_DATA_DIR}"
 

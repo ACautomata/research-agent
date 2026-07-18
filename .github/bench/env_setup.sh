@@ -353,7 +353,7 @@ bench_reapply_setup() {
     find "${data_dir}" -mindepth 1 -delete 2>/dev/null || true
     bench_tar_repo "${root}" | tar -xf - -C "${data_dir}"
     echo "[bench_reapply_setup] creating agent session dirs"
-    for agent_id in main judge; do
+    for agent_id in main; do
       mkdir -p "${data_dir}/agents/${agent_id}/sessions"
     done
     echo "[bench_reapply_setup] chown ${data_dir} -> 1000:1000"
@@ -384,7 +384,7 @@ bench_reapply_setup() {
   echo "[bench_reapply_setup] creating agent session dirs"
   bench_container_cli exec "${container}" bash -lc '
     set -e
-    for agent_id in main judge; do
+    for agent_id in main; do
       mkdir -p "/home/node/.openclaw/agents/${agent_id}/sessions"
     done
   '

@@ -180,10 +180,22 @@ jobs:
       - name: "Set up Docker Buildx"
         uses: docker/setup-buildx-action@v3
       - name: "Run ClawProBench (one scenario)"
+        # Route matrix.scenario + trials through the step env: (NOT `${{ }}`
+        # interpolation into run:). `${{ }}` is textual substitution before the
+        # shell parses the script, so a malicious id like `x";rm -rf /;#` would
+        # be re-parsed and executed. Env vars referenced as "$SCENARIO" inside
+        # double quotes are literal values the shell never re-evaluates.
+        # Defense-in-depth: the scenario ids come from a pinned commit of an
+        # admin-trusted fork (vars.CLAWPROBENCH_REPO + vars.CLAWPROBENCH_PIN),
+        # so they are not attacker-controlled today - but the data source is
+        # external YAML content, so do not trust it as shell.
+        env:
+          SCENARIO: ${{ matrix.scenario }}
+          TRIALS: ${{ steps.sel.outputs.trials }}
         run: |
           bash .github/bench/run_clawprobench.sh \
-            --scenario "${{ matrix.scenario }}" \
-            --trials "${{ steps.sel.outputs.trials }}"
+            --scenario "${SCENARIO}" \
+            --trials "${TRIALS}"
       - name: "Upload result"
         if: always()
         uses: actions/upload-artifact@v4

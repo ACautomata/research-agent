@@ -116,7 +116,7 @@ CI 实际门控走 **ClawProBench fork**（`ACautomata/ClawResearchBench:fork/ta
 - **确定性 grading**：fork 用自己的 `run.py` + scenario YAML + `custom_checks/*.py`，从 agent workspace 产物取分，**不依赖 judge agent**；汇总 `pass@3-rate`/`pass^3-rate`/`avg_score`，读 `result_main_<ts>.json` 的 `scenarios[]` 重聚合（见 `report_clawprobench.py`）。
 - **本地复现**：`bash .github/bench/run_clawprobench.sh --scenario <id> --trials 1 --keep-container`（先 1 场景×1 trial 冒烟，验证 main 真写出 custom_check 能读到的产物）。scenario id 取 fork `scenarios/research/*.yaml` 顶层 `id:` 字段。
 - **secrets**：`LLM_API_KEY`（必填，未配置 fail-fast；fork PR 的 `pull_request` 事件拿不到 secret，用 `workflow_dispatch` 在分支上触发）、`LLM_BASE_URL`（可选，默认 `https://api.minimaxi.com/anthropic`）、`BENCH_BASE_RESULTS_JSON`（可选，映射 `BENCH_BASE_SUMMARY` env 做 PR 评论 delta）。`LLM_MODEL` 不作为 secret--`run_clawprobench.sh` 强制 pin `minimax/MiniMax-M3`。
-- **安全**：fork commit pin（默认 `5b368ea`）只经 base-branch repo Variable `CLAWPROBENCH_PIN` 覆盖，**绝不**从 PR-controllable 字段取（run.py 在容器内带 `LLM_API_KEY` 执行）。
+- **安全**：fork 默认跟踪 `main`，只经 base-branch repo Variable `CLAWPROBENCH_PIN` 覆盖，**绝不**从 PR-controllable 字段取（run.py 在容器内带 `LLM_API_KEY` 执行）。
 
 ### Adding New Skills
 

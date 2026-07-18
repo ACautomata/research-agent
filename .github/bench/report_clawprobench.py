@@ -103,7 +103,7 @@ def render(results_dir: Path, base: dict | None) -> tuple[str, dict]:
     lines.append(f"- Run id: `{os.environ.get('BENCH_RUN_ID', 'local')}`")
     lines.append(f"- Commit: `{os.environ.get('BENCH_COMMIT', 'unknown')}`")
     lines.append(f"- Model: `{os.environ.get('LLM_MODEL', 'minimax/MiniMax-M3')}`")
-    lines.append(f"- Fork pin: `{os.environ.get('CLAWPROBENCH_PIN', '5b368ea')}`")
+    lines.append(f"- Fork ref: `{os.environ.get('CLAWPROBENCH_PIN', 'main')}`")
     lines.append("")
     lines.append("| Metric | Value |")
     lines.append("|---|---:|")

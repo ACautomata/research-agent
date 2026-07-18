@@ -154,7 +154,7 @@ feishu 用 WebSocket 模式：`streaming` 必须是 boolean（不是字符串）
 
 ## 进阶：Benchmark 与 CI
 
-活跃的 benchmark CI 使用 **ClawProBench fork**，而非已退役的 `benchmarks/_common/` harness。控制代码位于 `.github/bench/`（`env_setup.sh`、`run_clawprobench.sh`、`report_clawprobench.py`）和 `.github/workflows/clawprobench.yml`；设计决策见 [ADR-0002](docs/adr/0002-clawprobench-fork-target-main.md)。
+活跃的 benchmark CI 使用 **ClawProBench fork**，取代已退役的 legacy harness。控制代码位于 `.github/bench/`（`env_setup.sh`、`run_clawprobench.sh`、`report_clawprobench.py`）和 `.github/workflows/clawprobench.yml`；设计决策见 [ADR-0002](docs/adr/0002-clawprobench-fork-target-main.md)。
 
 ### 本地运行
 
@@ -168,19 +168,19 @@ cp docker/.env.bench.example docker/.env.bench
 bash .github/bench/run_clawprobench.sh --scenario <scenario-id> --trials 1 --keep-container
 ```
 
-场景 ID 来自 fork 的 `scenarios/research/*.yaml` 顶层 `id:`。CI 默认每个场景运行 3 个 trial，并由 fork 以原始 trial outcome 聚合 `pass@3`（至少一次通过）和 `pass^3`（全部通过）。已 pin 的 fork commit 会在每个 trial 后恢复 target workspace 与 `memory-wiki` vault，避免后续 trial 复用前序 `wiki_apply` 产物。
+场景 ID 来自 fork 的 `scenarios/research/*.yaml` 顶层 `id:`。CI 默认每个场景运行 3 个 trial，并由 fork 以原始 trial outcome 聚合 `pass@3`（至少一次通过）和 `pass^3`（全部通过）。fork `main` 的 target-agent runner 会在每个 trial 后恢复 target workspace 与 `memory-wiki` vault，避免后续 trial 复用前序 `wiki_apply` 产物。
 
 ### CI、secrets 与 pin
 
 - `LLM_API_KEY` 是本地与 CI 的必填 secret；`LLM_BASE_URL` 和 `BENCH_BASE_RESULTS_JSON` 可选。
 - 来自外部 fork 的 PR 不会收到 repository secrets，workflow 会中性跳过；维护者可用 `workflow_dispatch` 在可信分支运行。
-- `run_clawprobench.sh` 仅接受仓库 base-side 配置的 immutable `CLAWPROBENCH_PIN`，不允许 PR 输入控制 fork revision。该 pin 的修改必须附带 fork 的隔离回归测试和 benchmark 验证结果。
+- `run_clawprobench.sh` 默认跟踪 fork `main`；只允许仓库 base-side 的 `CLAWPROBENCH_PIN` variable 覆盖，不允许 PR 输入控制 fork ref。对 fork `main` 的变更必须附带隔离回归测试和 benchmark 验证结果。
 
 ## 贡献与 PR 规则
 
 **开上游 PR 前必须完成**（缺一不可）：
 
-1. 本地跑过相关 benchmark 且通过：`benchmarks/_common/run_local_benchmark.sh <name>`
+1. 本地跑过相关 ClawProBench 场景且通过：`bash .github/bench/run_clawprobench.sh --scenario <scenario-id> --trials 1`
 2. forked repo 的 `Benchmark` GitHub Actions CI 通过
 3. PR 描述 / 评论贴出**本地 + fork CI** 两份 benchmark 结果摘要
 4. 改 skill / agent / workflow / 配置，必须实际触发 OpenClaw 端到端验证（在 Dashboard 或对话里跑通），不许只靠推理就开 PR

@@ -29,16 +29,21 @@ TRIALS="3"
 KEEP_CONTAINER=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --scenario) SCENARIO="$2"; shift 2 ;;
-    --trials) TRIALS="$2"; shift 2 ;;
+    --scenario)
+      [[ $# -ge 2 ]] || { echo "::error::--scenario requires a value" >&2; exit 64; }
+      SCENARIO="$2"; shift 2 ;;
+    --trials)
+      [[ $# -ge 2 ]] || { echo "::error::--trials requires a value" >&2; exit 64; }
+      TRIALS="$2"; shift 2 ;;
     --keep-container) KEEP_CONTAINER=1; shift ;;
     *) echo "::error::unknown arg: $1" >&2; exit 64 ;;
   esac
 done
 [[ -n "${SCENARIO}" ]] || { echo "::error::--scenario is required" >&2; exit 64; }
+[[ "${TRIALS}" =~ ^[1-9][0-9]*$ ]] || { echo "::error::--trials must be a positive integer" >&2; exit 64; }
 export BENCH_KEEP_CONTAINER="${KEEP_CONTAINER}"
 
-CLAWPROBENCH_PIN="${CLAWPROBENCH_PIN:-5b368ea}"
+CLAWPROBENCH_PIN="${CLAWPROBENCH_PIN:-main}"
 CLAWPROBENCH_REPO="${CLAWPROBENCH_REPO:-https://github.com/ACautomata/ClawResearchBench.git}"
 RESULTS_DIR="${ROOT}/results"
 mkdir -p "${RESULTS_DIR}"
@@ -181,10 +186,11 @@ print(f"[clawprobench] memory-wiki enabled OK: {mw_enabled}")
 # --- 7. clone the fork into mktemp (NEVER inside the repo) + cp into container.
 #        --filter=blob:none (partial clone) lets us checkout an arbitrary pinned
 #        commit SHA without fetching the full history; GitHub rejects shallow
-#        fetch-by-SHA for non-HEAD commits. The pin defaults to 5b368ea (PR #7
-#        merge = current fork main HEAD); override only via a base-branch
+#        fetch-by-SHA for non-HEAD commits. The pin is the reviewed fork commit
+#        that restores memory-wiki between trials; override only via a base-branch
 #        Variable (CLAWPROBENCH_PIN), never PR-controllable input. ---
 FORK_SRC="$(mktemp -d)/clawprobench"
+trap 'rm -rf "${FORK_SRC}"; ${BENCH_KEEP_CONTAINER:+:} bench_teardown' EXIT
 # --filter=blob:none: partial clone (no history blobs) that still lets us
 # checkout any reachable pinned commit. GitHub rejects shallow fetch-by-SHA
 # for non-HEAD commits, so --depth 1 is the wrong tool here. The fetch of the
@@ -208,6 +214,11 @@ bench_container_cli exec "$BENCH_CONTAINER" bash -lc '
 bench_container_cli exec "$BENCH_CONTAINER" openclaw gateway status >/dev/null \
   && echo "[clawprobench] openclaw runtime healthy after venv install"
 
+# Remove reports left by an interrupted local --keep-container run. The runner must
+# only ever copy a report produced by this invocation; otherwise a failed run could
+# silently upload a stale result from a previous scenario.
+bench_container_cli exec "$BENCH_CONTAINER" bash -lc 'rm -f /home/node/.openclaw/results/result_main_*.json'
+
 # --- 9. run the fork's run.py: --agent main, explicit --model M3, explicit --results-dir.
 #        --local-agent: make the fork pass --local to `openclaw agent` (embedded
 #        mode). Without it, fork runs gateway mode but passes a self-generated
@@ -223,6 +234,7 @@ bench_container_cli exec "$BENCH_CONTAINER" openclaw gateway status >/dev/null \
 echo "[clawprobench] run.py --scenario ${SCENARIO} --trials ${TRIALS} --benchmark-status all"
 bench_container_cli exec -i \
   -e LLM_API_KEY -e LLM_BASE_URL \
+  -e "BENCH_SCENARIO=${SCENARIO}" -e "BENCH_TRIALS=${TRIALS}" \
   "$BENCH_CONTAINER" bash -lc '
     set -e
     cd /home/node/.openclaw
@@ -230,8 +242,8 @@ bench_container_cli exec -i \
       --agent main \
       --model minimax/MiniMax-M3 \
       --local-agent \
-      --scenario "'"${SCENARIO}"'" \
-      --trials "'"${TRIALS}"'" \
+      --scenario "$BENCH_SCENARIO" \
+      --trials "$BENCH_TRIALS" \
       --benchmark-status all \
       --execution-mode live \
       --results-dir /home/node/.openclaw/results

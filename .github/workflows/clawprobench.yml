@@ -4,13 +4,10 @@ name: ClawProBench
 # fork (ClawResearchBench:fork/target-main, pinned commit). The fork targets
 # the existing main agent and reuses its workspace (see ADR-0002).
 #
-# Security: uses `pull_request` (NOT `pull_request_target`). A PR can modify
-# .github/bench/run_clawprobench.sh, which runs with LLM_API_KEY in scope.
-# `pull_request` runs the workflow from the PR branch but does NOT expose
-# repo secrets to fork PRs (GitHub sandboxes them), so an untrusted fork
-# cannot exfiltrate the key via a modified bootstrap. Same-repo PR authors
-# are trusted collaborators who already have secret access. (workflow_dispatch
-# on the branch is the path for validating this introducing PR.)
+# Security: PR branches can modify .github/bench/run_clawprobench.sh, so this
+# workflow never executes benchmark code with LLM_API_KEY on a pull_request.
+# PR runs skip neutrally; trusted maintainers run the secret-bearing benchmark
+# via workflow_dispatch or after merge on main.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -49,7 +46,10 @@ env:
   # Fork pin. Default hard-coded; override ONLY via a base-branch repo Variable
   # (never from PR-controllable input — run.py runs inside the container with
   # LLM_API_KEY in scope, so the fork commit must be trusted-by-pin).
-  CLAWPROBENCH_PIN: ${{ vars.CLAWPROBENCH_PIN || '5b368ea' }}
+  # Track the reviewed fork's main branch. This is intentionally mutable so CI
+  # receives fork fixes without a separate pin-bump PR; only a base-side repo
+  # Variable may override it, never PR-controlled input.
+  CLAWPROBENCH_PIN: ${{ vars.CLAWPROBENCH_PIN || 'main' }}
   CLAWPROBENCH_REPO: ${{ vars.CLAWPROBENCH_REPO || 'https://github.com/ACautomata/ClawResearchBench.git' }}
   BENCH_RESULTS_DIR: bench-results
 
@@ -71,7 +71,9 @@ jobs:
       - name: "Verify required secrets"
         id: verify
         env:
-          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          # Never expose this secret to a PR checkout: a same-repository PR may
+          # modify the benchmark bootstrap just as an external fork can.
+          LLM_API_KEY: ${{ github.event_name != 'pull_request' && secrets.LLM_API_KEY || '' }}
           # Route PR-controlled context through env (not ${{ }} interpolation
           # into run:) so a fork-controlled repo name cannot re-parse as shell.
           # Empty for non-pull_request events.
@@ -79,12 +81,8 @@ jobs:
           PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
         run: |
           if [ -z "${LLM_API_KEY:-}" ]; then
-            # `pull_request` does not expose repo secrets to forks, so an empty
-            # key here is expected for fork PRs - skip neutrally (no permanently
-            # failing check). Same-repo PRs without the secret are a real
-            # misconfiguration and still fail fast.
-            if [ "${EVENT_NAME}" = "pull_request" ] && [ -n "${PR_HEAD_REPO}" ] && [ "${PR_HEAD_REPO}" != "${GITHUB_REPOSITORY}" ]; then
-              echo "::notice::Fork PR without secrets - skipping ClawProBench (pull_request does not expose LLM_API_KEY to forks). Validate via workflow_dispatch on the branch."
+            if [ "${EVENT_NAME}" = "pull_request" ]; then
+              echo "::notice::Pull request run - skipping ClawProBench because PR-controlled benchmark code never receives LLM_API_KEY. Use workflow_dispatch from a trusted branch or wait for main."
               echo "skip=true" >> "$GITHUB_OUTPUT"
               exit 0
             fi
@@ -182,7 +180,7 @@ jobs:
       BENCH_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
       BENCH_REPO: ${{ github.repository }}
       BENCH_PR_NUMBER: ${{ github.event.pull_request.number }}
-      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+      LLM_API_KEY: ${{ github.event_name != 'pull_request' && secrets.LLM_API_KEY || '' }}
       LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
     steps:
       - name: "Resolve trials (workflow_dispatch override)"
@@ -196,12 +194,14 @@ jobs:
           trials="${INPUT_TRIALS:-3}"
           echo "trials=${trials}" >> "$GITHUB_OUTPUT"
       - name: "Checkout PR head"
-        uses: actions/checkout@v5
+        # actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
       - name: "Set up Docker Buildx"
-        uses: docker/setup-buildx-action@v3
+        # docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
       - name: "Run ClawProBench (one scenario)"
         # Route matrix.scenario + trials through the step env: (NOT `${{ }}`
         # interpolation into run:). `${{ }}` is textual substitution before the
@@ -221,7 +221,8 @@ jobs:
             --trials "${TRIALS}"
       - name: "Upload result"
         if: always()
-        uses: actions/upload-artifact@v4
+        # actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           # Per-scenario artifact name (the file is already result_<scenario>.json),
           # so the aggregate's merge-multiple cannot collide.
@@ -249,15 +250,18 @@ jobs:
       BENCH_EXPECTED_SCENARIOS: ${{ needs.discover.outputs.scenarios }}
     steps:
       - name: "Checkout"
-        uses: actions/checkout@v5
+        # actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: "Set up Python"
-        uses: actions/setup-python@v5
+        # actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: "3.11"
       - name: "Download all results"
-        uses: actions/download-artifact@v4
+        # actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         # continue-on-error: if every bench job fails (no result-* artifacts),
         # download-artifact@v4 with pattern:result-* matches nothing and fails
         # the step. We still want the renderer to run and post a "0 results"
@@ -273,7 +277,8 @@ jobs:
           python3 .github/bench/report_clawprobench.py
       - name: "Upload merged results"
         if: always()
-        uses: actions/upload-artifact@v4
+        # actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: clawprobench-results-${{ github.run_id }}
           path: bench-results/

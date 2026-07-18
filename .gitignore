@@ -53,14 +53,6 @@ workspace/qmd/
 workspace/logs/
 workspace/tasks/
 
-# === Judge workspace runtime state (tracked: AGENTS.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, MEMORY.md, HEARTBEAT.md, DREAMS.md, skills/*) ===
-judge/memory/
-judge/state/
-judge/qmd/
-judge/logs/
-judge/tasks/
-judge/sessions/
-
 # === OS / editor ===
 .DS_Store
 *.swp

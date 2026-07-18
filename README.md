@@ -1,6 +1,6 @@
 # research-agent
 
-> 跑在 OpenClaw 上的自动化科研 agent（单 main + judge，覆盖论文 ingest / extract / critic / validate / audit）。本仓库是它的 `~/.openclaw` 配置目录，[OpenClaw 本体需单独安装](https://docs.openclaw.ai/install)。
+> 跑在 OpenClaw 上的自动化科研 agent（单 main agent，覆盖论文 ingest / extract / critic / validate / audit）。本仓库是它的 `~/.openclaw` 配置目录，[OpenClaw 本体需单独安装](https://docs.openclaw.ai/install)。
 
 ## 快速上手
 
@@ -52,12 +52,11 @@ openclaw dashboard
 
 本仓库是 `~/.openclaw` 配置目录的 git 化版本（同步到 `ACautomata/research-agent`），**不是** OpenClaw 运行时本体——最大的误解就是「clone 本仓库 = 装好 OpenClaw」。
 
-它跑一个**单 main agent + judge** 的自动化科研 agent：
+它跑一个**单 main agent** 的自动化科研 agent：
 
-- **main agent** 做所有领域工作，覆盖 ingest / curate / extract / critic / design / spec / audit / ideate 等研究动词，直接在 Dashboard 聊天里接收自然语言指令，自行决定是否 spawn judge 或自己的隔离子会话（[Agent Workspace 概念](https://docs.openclaw.ai/concepts/agent-workspace)）。
-- **judge** 只做质量门与 benchmark 评分，不做面向用户的对话。
+- **main agent** 做所有领域工作，覆盖 ingest / curate / extract / critic / design / spec / audit / ideate 等研究动词，直接在 Dashboard 聊天里接收自然语言指令，需要批量 / 并行 / context 隔离时 spawn 自己的隔离子会话（[Agent Workspace 概念](https://docs.openclaw.ai/concepts/agent-workspace)）。质量门由 main 直接跑 `critic`/`audit` predicate 完成。
 
-skill 分两层：**predicate**（原子研究动词）+ **orchestrator**（按场景用文本引用编排 predicate）。系统只有 main 和 judge 这两个 agent；架构细节见仓库内 `CONTEXT.md` 与 `docs/adr/0001-single-main-agent-two-layer-skills.md`，更多概念见[OpenClaw 文档总入口](https://docs.openclaw.ai/)。
+skill 分两层：**predicate**（原子研究动词）+ **orchestrator**（按场景用文本引用编排 predicate）。系统只有 main 这一个 agent（benchmark 评分已迁至 ClawProBench fork 的确定性 `custom_check`，judge agent 已退役，见 [ADR-0002](docs/adr/0002-clawprobench-fork-target-main.md)）；架构细节见仓库内 `CONTEXT.md` 与 `docs/adr/0001-single-main-agent-two-layer-skills.md`，更多概念见[OpenClaw 文档总入口](https://docs.openclaw.ai/)。
 
 ## 进入 Dashboard（Control UI）
 

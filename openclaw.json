@@ -67,7 +67,7 @@
         "delegationMode": "suggest",
         "maxConcurrent": 8,
         "maxSpawnDepth": 1,
-        "allowAgents": ["judge"]
+        "allowAgents": []
       }
     },
     "list": [
@@ -76,11 +76,6 @@
         "name": "Research Assistant",
         "default": true,
         "workspace": "~/.openclaw/workspace"
-      },
-      {
-        "id": "judge",
-        "name": "Judge",
-        "workspace": "~/.openclaw/judge"
       }
     ]
   },

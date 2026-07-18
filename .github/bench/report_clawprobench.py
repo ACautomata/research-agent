@@ -8,8 +8,8 @@ aggregate step can merge-multiple without timestamp collisions.
 
 This renderer reads each file's ``scenarios[]`` and re-aggregates across files
 (per-file top-level ``overall_score``/``strict_pass_rate`` describe a single
-scenario, not the suite). It is self-contained — it does NOT import the legacy
-``benchmarks/_common/report_pr.py`` (that file is retired in the cleanup PR).
+scenario, not the suite). It is self-contained and does not import a legacy
+reporting implementation.
 
 Inputs (env):
   BENCH_RESULTS_DIR     -- dir containing result_<scenario>.json (default: bench-results)

@@ -3,7 +3,8 @@
 #
 # Unified pre-benchmark env. Boots a minimal openclaw-docker-cn-im container,
 # mounts/copies the current repo at /home/node/.openclaw, waits for the gateway
-# to become ready, and exports helper functions for per-benchmark env.sh files.
+# to become ready, and writes a sourceable runtime environment for the
+# ClawProBench bootstrap.
 #
 # Supported container runtimes:
 #   BENCH_CONTAINER_RUNTIME=docker     Use Docker + docker compose (CI default).
@@ -564,11 +565,10 @@ DM_POLICY=disabled
 GROUP_POLICY=disabled
 ALLOW_FROM=
 OPENCLAW_WORKSPACE_ROOT=/home/node/.openclaw
-# Plugin loading gate. Default false (legacy Benchmark workflow runs only
-# `openclaw agent` and needs no plugin-backed tools). The ClawProBench bootstrap
-# exports OPENCLAW_PLUGINS_ENABLED=true before invoking env_setup so the
-# memory-wiki plugin (wiki_apply/wiki_search) loads for research scenarios
-# (ADR-0002); docker-compose.bench.yml resolves this via interpolation.
+# Plugin loading gate. Default false; the ClawProBench bootstrap exports
+# OPENCLAW_PLUGINS_ENABLED=true before invoking env_setup so the memory-wiki
+# plugin (wiki_apply/wiki_search) loads for research scenarios (ADR-0002).
+# docker-compose.bench.yml resolves this via interpolation.
 OPENCLAW_PLUGINS_ENABLED=${OPENCLAW_PLUGINS_ENABLED:-false}
 # LLM provider creds for the gateway process. LLM_BASE_URL is written here for
 # compose's ${LLM_BASE_URL} interpolation (docker-compose.bench.yml:38); it has
@@ -633,7 +633,7 @@ log "SecretRef patch applied via bench_reapply_setup"
 # 5. Wait for the openclaw container to start and the gateway to become ready.
 bench_wait_ready "${CONTAINER}"
 
-# 6. Export the contract for downstream env.sh scripts and subsequent CI steps.
+# 6. Export the runtime environment for the ClawProBench bootstrap and CI steps.
 export BENCH_CONTAINER="${CONTAINER}"
 export BENCH_MOUNT="/home/node/.openclaw"
 export BENCH_OPENCLAW="openclaw"

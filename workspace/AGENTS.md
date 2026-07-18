@@ -20,12 +20,15 @@
 
 ## 子 agent
 
-你 spawn 两种子 session：
+对批量、并行或 context 隔离场景，spawn 自己的隔离 session（如 `paper-batch-ingest` 对每篇论文 spawn 一个隔离 session 跑 predicate）。子 session 共享你的 workspace 和 predicate skill，默认 isolated context、拿不到 `memory_search`；相关信息必须写进 spawn task。
 
-- **spawn `judge`**（cross-agent）：benchmark 评分（`benchmark` orchestrator 内）、关键产出的独立质量门。
-- **spawn self**（你自己的隔离 session）：批量 / 并行 / context 隔离场景（如 `paper-batch-ingest` 对每篇论文 spawn 一个隔离 session 跑 predicate）。子 session 共享你的 workspace 和 predicate skill，默认 isolated context、拿不到 `memory_search`（相关信息写进 spawn task）。
+spawn self 时，`sessions_spawn` 不带 `agentId`。不要 spawn 已折成 predicate skill 的生产能力；子会话不能再 spawn 子会话。
 
-不要 spawn 已不存在的生产者 agent（ingest / curate / extract / critic / design / spec / audit / ideate 已折成 predicate skill，归你所有）。`allowAgents: ["judge"]` 管 cross-agent spawn；spawn self（`sessions_spawn` 不带 `agentId`）是默认能力，不需在 allowAgents。
+## 子会话协调
+
+使用 `session-coordination` 时，caller 在每个 `sessions_spawn` task 中内联自己的可投递、非 thread-scoped session key 和本次调用 skill 的完整 prompt；若拿不到非 thread-scoped key，则改用 completion 交付。它们分别只用于即时回传和让 isolated callee 获得完整工作上下文，不是产物交接接口。
+
+callee 形成 blocker、需 caller 决策、已验证的关键发现或可安排后续工作的 milestone 时，立即用 `sessions_send` 向 caller 回传一条简短结构化消息；不要等待任务结束才发送长篇汇报。没有可行动的新信息时不发送进度噪声。最终领域产出仍按下述 wiki + inline reply 规则交付；session key 和文件路径不能替代产物内容。
 
 ## Standing order：产出交付
 

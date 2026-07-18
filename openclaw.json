@@ -131,6 +131,11 @@
     "sessions": {
       "visibility": "all"
     },
+    "subagents": {
+      "tools": {
+        "alsoAllow": ["sessions_send"]
+      }
+    },
     "fs": {
       "workspaceOnly": false
     },

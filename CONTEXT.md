@@ -44,7 +44,10 @@ ClawProBench 的评测单元（YAML），含 `prompt`/`tools`/`custom_check`/`wo
 确定性评分脚本（`custom_checks/*.py`），从 agent workspace 产物取分，**不依赖 judge agent**。这是 fork 取代旧 `benchmarks/_common/judge.py`（spawn judge 评分）的根据。
 
 **profile**:
-命名场景切片--`core`/`intelligence`/`coverage`/`native`/`full`。本仓库 CI 跑 research 精选子集（`--benchmark-status all`），非泛化 model ranking。
+命名场景切片--`core`/`intelligence`/`coverage`/`native`/`full`。本仓库 CI 跑 fork 的 **research 全部场景**（`scenarios/research/*.yaml`，170 个，全部 `benchmark_status=incubating` + `signal_source=workspace_live`），非泛化 model ranking、非手挑 curated 子集。
+
+**matrix discover**:
+CI workflow 的 `bench` matrix 不再硬编码 scenario 列表。`discover` job 先 partial clone fork @ `CLAWPROBENCH_PIN`，`grep -rhoE '^id:[[:space:]]+\S+' scenarios/research/` 提取顶层 `id`（`loader.py:200` 用 `raw["id"]` 作 `scenario_id` 无变换，故 `id:` 即 `--scenario` 接受值），输出 `matrix` JSON（bench `fromJSON` 展开）、`scenarios` 逗号列表（aggregate 的 `BENCH_EXPECTED_SCENARIOS`）、`count`。1 scenario = 1 job（每 job 独立 runner VM + 容器），`max-parallel:1` 串行。见 [ADR-0003](./docs/adr/0003-dynamic-scenario-matrix.md)。
 
 **target agent**:
 fork 后 CI 门控的指定 agent（默认 `main`），复用其 workspace；区别于原样 ClawProBench 按 `--model` 新建的 `ocb6-<model>-<uuid>` 临时 agent。`--agent` 指定，`--model` 改 optional 并从 `openclaw.json` 自动读 main 的 model，result slug 用 `main`。

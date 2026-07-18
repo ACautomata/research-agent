@@ -35,18 +35,22 @@ permissions:
   pull-requests: write
   issues: write
 
-# Cancel a stale in-flight run when a new push lands. The matrix is serial
-# (~4-4.5h); without this, rapid PR pushes stack overlapping runs and burn
-# LLM quota.
+# The matrix is serial (170 scenarios x ~20min = ~2-3 days at max-parallel:1).
+# cancel-in-progress is intentionally FALSE: a full suite run takes days, so a
+# mid-run push must NOT cancel it back to job 1 (the suite would never complete
+# on an active PR). New pushes queue behind the in-flight run instead of
+# interrupting it. Trade-off: stacked pushes can pile up overlapping runs and
+# burn LLM quota - acceptable given the alternative (never finishing).
 concurrency:
   group: clawprobench-${{ github.event.pull_request.number || github.ref || github.run_id }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   # Fork pin. Default hard-coded; override ONLY via a base-branch repo Variable
   # (never from PR-controllable input — run.py runs inside the container with
   # LLM_API_KEY in scope, so the fork commit must be trusted-by-pin).
   CLAWPROBENCH_PIN: ${{ vars.CLAWPROBENCH_PIN || '5b368ea' }}
+  CLAWPROBENCH_REPO: ${{ vars.CLAWPROBENCH_REPO || 'https://github.com/ACautomata/ClawResearchBench.git' }}
   BENCH_RESULTS_DIR: bench-results
 
 defaults:
@@ -70,35 +74,86 @@ jobs:
           echo "LLM_API_KEY present."
           echo "fork pin: ${CLAWPROBENCH_PIN}"
 
-  bench:
-    name: "Bench: ${{ matrix.scenario }}"
+  discover:
+    name: "Discover research scenarios"
     needs: setup
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ matrix.timeout }}
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
+      scenarios: ${{ steps.gen.outputs.scenarios }}
+      count: ${{ steps.gen.outputs.count }}
+    env:
+      # CLAWPROBENCH_PIN / CLAWPROBENCH_REPO are inherited from the workflow-
+      # level `env:` (the `env` context is NOT available inside a job-level
+      # env: block, so they must not be re-referenced here). inputs.scenario is
+      # workflow_dispatch-only, so admin-trusted (see the security comment at
+      # the top of this file); routed through env, never interpolated into run:.
+      INPUT_SCENARIO: ${{ inputs.scenario }}
+    steps:
+      - name: "Clone fork @ pin + extract research scenario ids"
+        id: gen
+        run: |
+          set -euo pipefail
+          FORK_SRC="$(mktemp -d)/clawprobench"
+          # --filter=blob:none (partial clone, no history blobs) + fetch default
+          # ref so an arbitrary pinned commit resolves. GitHub rejects shallow
+          # fetch-by-SHA for non-HEAD commits, so --depth 1 is the wrong tool.
+          git clone --quiet --filter=blob:none --no-checkout "${CLAWPROBENCH_REPO}" "${FORK_SRC}"
+          git -C "${FORK_SRC}" fetch --quiet origin
+          git -C "${FORK_SRC}" checkout -q "${CLAWPROBENCH_PIN}"
+          echo "[discover] fork pinned at ${CLAWPROBENCH_PIN}"
+
+          # loader.py:200 sets scenario_id=raw["id"] verbatim (no transform),
+          # so the YAML top-level `id:` IS the value --scenario accepts. Same
+          # authority as `run.py --list`, but zero deps / no container / seconds.
+          mapfile -t IDS < <(grep -rhoE '^id:[[:space:]]+\S+' \
+              "${FORK_SRC}/scenarios/research/" | awk '{print $2}' | sort -u)
+
+          # workflow_dispatch override: narrow the matrix to a single scenario
+          # (replaces the old per-job skip dance in the bench job).
+          if [ -n "${INPUT_SCENARIO}" ]; then
+            IDS=("${INPUT_SCENARIO}")
+          fi
+
+          [ "${#IDS[@]}" -gt 0 ] || {
+            echo "::error::no research scenario ids discovered at pin ${CLAWPROBENCH_PIN}" >&2
+            exit 1
+          }
+
+          matrix=$(printf '%s\n' "${IDS[@]}" | jq -R . | jq -cs '{scenario: .}')
+          scenarios=$(printf '%s,' "${IDS[@]}"); scenarios=${scenarios%,}
+
+          {
+            echo "matrix=${matrix}"
+            echo "scenarios=${scenarios}"
+            echo "count=${#IDS[@]}"
+          } >> "$GITHUB_OUTPUT"
+          echo "::notice::discovered ${#IDS[@]} research scenario(s) at pin ${CLAWPROBENCH_PIN}"
+
+  bench:
+    name: "Bench: ${{ matrix.scenario }}"
+    needs: [setup, discover]
+    # Empty matrix (pin moved and research/ vanished) would otherwise spawn a
+    # no-op job; skip the whole bench fan-out instead.
+    if: needs.discover.outputs.count != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       max-parallel: 1
       matrix:
-        # 1 scenario per job (fork --scenario is single-valued and matches the
-        # YAML `id` field, NOT the filename stem — research scenarios are
-        # `research_<stem>`, and idea_generate drops its descriptive suffix in
-        # the id, e.g. idea_generate_qa_001_paper_only.yaml -> research_idea_generate_qa_001).
-        # Each job boots its own container (runners are separate VMs — a container
-        # cannot be shared across jobs). Per-job BENCH_RUN_ID isolates compose
-        # project / container name / data dir as defense-in-depth on top of max-parallel:1.
-        include:
-          - { scenario: research_paper_review_s2_reflexion,            timeout: 60 }
-          - { scenario: research_paper_review_s2_nonstandard,          timeout: 60 }
-          - { scenario: research_paper_review_s3_competing,            timeout: 60 }
-          - { scenario: research_paper_review_s3_negative,             timeout: 60 }
-          - { scenario: research_paper_review_s4_budget,               timeout: 60 }
-          - { scenario: research_paper_review_s5_largerepo,            timeout: 75 }
-          - { scenario: research_paper_review_s6_cross_priority,       timeout: 75 }
-          - { scenario: research_idea_generate_qa_001,                 timeout: 60 }
-          - { scenario: research_idea_generate_qa_002,                 timeout: 60 }
-          - { scenario: research_idea_generate_qa_005,                 timeout: 60 }
-          - { scenario: research_idea_generate_qa_010,                 timeout: 60 }
-          - { scenario: research_idea_generate_qa_018,                 timeout: 60 }
+        # 1 scenario per job, dynamically discovered from the fork's
+        # scenarios/research/*.yaml `id:` fields (see the discover job). fork
+        # --scenario is single-valued and matches the YAML `id` field, NOT the
+        # filename stem - research scenarios are `research_<stem>`, and
+        # idea_generate drops its descriptive suffix in the id, e.g.
+        # idea_generate_qa_001_paper_only.yaml -> research_idea_generate_qa_001.
+        # Each job boots its own container (runners are separate VMs - a
+        # container cannot be shared across jobs). Per-job BENCH_RUN_ID
+        # isolates compose project / container name / data dir as
+        # defense-in-depth on top of max-parallel:1.
+        scenario: ${{ fromJSON(needs.discover.outputs.matrix).scenario }}
     env:
       BENCH_RUN_ID: ${{ github.run_id }}-${{ matrix.scenario }}
       BENCH_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -107,39 +162,30 @@ jobs:
       LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
       LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
     steps:
-      - name: "Resolve scenario/trials (workflow_dispatch override)"
+      - name: "Resolve trials (workflow_dispatch override)"
         id: sel
         env:
           # workflow_dispatch inputs are admin-trusted, but route through env
-          # rather than interpolating into run: (defense-in-depth).
-          INPUT_SCENARIO: ${{ inputs.scenario }}
+          # rather than interpolating into run: (defense-in-depth). The single-
+          # scenario dispatch narrowing already happened in the discover job.
           INPUT_TRIALS: ${{ inputs.trials }}
-          MATRIX_SCENARIO: ${{ matrix.scenario }}
         run: |
           trials="${INPUT_TRIALS:-3}"
-          if [ -n "${INPUT_SCENARIO}" ] && [ "${INPUT_SCENARIO}" != "${MATRIX_SCENARIO}" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::Skipping ${MATRIX_SCENARIO} (dispatch singled out ${INPUT_SCENARIO})"
-          else
-            echo "trials=${trials}" >> "$GITHUB_OUTPUT"
-          fi
+          echo "trials=${trials}" >> "$GITHUB_OUTPUT"
       - name: "Checkout PR head"
-        if: steps.sel.outputs.skip != 'true'
         uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
       - name: "Set up Docker Buildx"
-        if: steps.sel.outputs.skip != 'true'
         uses: docker/setup-buildx-action@v3
       - name: "Run ClawProBench (one scenario)"
-        if: steps.sel.outputs.skip != 'true'
         run: |
           bash .github/bench/run_clawprobench.sh \
             --scenario "${{ matrix.scenario }}" \
             --trials "${{ steps.sel.outputs.trials }}"
       - name: "Upload result"
-        if: always() && steps.sel.outputs.skip != 'true'
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           # Per-scenario artifact name (the file is already result_<scenario>.json),
@@ -150,7 +196,7 @@ jobs:
 
   aggregate:
     name: "Aggregate + PR comment"
-    needs: [setup, bench]
+    needs: [setup, discover, bench]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -162,7 +208,7 @@ jobs:
       BENCH_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
       BENCH_RESULTS_DIR: bench-results
       BENCH_BASE_SUMMARY: ${{ secrets.BENCH_BASE_RESULTS_JSON }}
-      BENCH_EXPECTED_SCENARIOS: "research_paper_review_s2_reflexion,research_paper_review_s2_nonstandard,research_paper_review_s3_competing,research_paper_review_s3_negative,research_paper_review_s4_budget,research_paper_review_s5_largerepo,research_paper_review_s6_cross_priority,research_idea_generate_qa_001,research_idea_generate_qa_002,research_idea_generate_qa_005,research_idea_generate_qa_010,research_idea_generate_qa_018"
+      BENCH_EXPECTED_SCENARIOS: ${{ needs.discover.outputs.scenarios }}
     steps:
       - name: "Checkout"
         uses: actions/checkout@v5

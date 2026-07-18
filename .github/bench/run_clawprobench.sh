@@ -130,7 +130,8 @@ if isinstance(channels, dict):
 
 p.write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 print(f"[clawprobench] contextEngine: {prev_ce!r} -> legacy (lossless-claw disabled)")
-print(f"[clawprobench] channels disabled: {disabled or '(none present)'}")
+_ch_summary = ", ".join(disabled) if disabled else "none present"
+print(f"[clawprobench] channels disabled: {_ch_summary}")
 '
 
 # --- 6. post-patch hard assert: primary must be M3 (fail loud, not silent M2.7) ---

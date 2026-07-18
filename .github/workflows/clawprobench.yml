@@ -4,13 +4,15 @@ name: ClawProBench
 # fork (ClawResearchBench:fork/target-main, pinned commit). The fork targets
 # the existing main agent and reuses its workspace (see ADR-0002).
 #
-# ⚠️ Introduction gotcha: pull_request_target reads this workflow YAML from the
-# BASE branch (main). Until this file lands on main, the pull_request_target
-# trigger will NOT fire on the introducing PR. Validate THIS PR by dispatching
-# the workflow on the PR branch (workflow_dispatch uses the branch's YAML).
-# After merge, pull_request_target works for subsequent PRs.
+# Security: uses `pull_request` (NOT `pull_request_target`). A PR can modify
+# .github/bench/run_clawprobench.sh, which runs with LLM_API_KEY in scope.
+# `pull_request` runs the workflow from the PR branch but does NOT expose
+# repo secrets to fork PRs (GitHub sandboxes them), so an untrusted fork
+# cannot exfiltrate the key via a modified bootstrap. Same-repo PR authors
+# are trusted collaborators who already have secret access. (workflow_dispatch
+# on the branch is the path for validating this introducing PR.)
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
   push:

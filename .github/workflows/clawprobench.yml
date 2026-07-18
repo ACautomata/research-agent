@@ -1,0 +1,285 @@
+name: ClawProBench
+
+# Gates main/颖姗 on a curated research scenario subset via the ClawProBench
+# fork (ClawResearchBench:fork/target-main, pinned commit). The fork targets
+# the existing main agent and reuses its workspace (see ADR-0002).
+#
+# Security: PR branches can modify .github/bench/run_clawprobench.sh, so this
+# workflow never executes benchmark code with LLM_API_KEY on a pull_request.
+# PR runs skip neutrally; trusted maintainers run the secret-bearing benchmark
+# via workflow_dispatch or after merge on main.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: "Single scenario id to run (default: the curated 12)"
+        type: string
+        required: false
+        default: ""
+      trials:
+        description: "Trials per scenario (default 3 for pass@3/pass^3 semantics)"
+        type: string
+        required: false
+        default: "3"
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+# The matrix is serial (170 scenarios x ~20min = ~2-3 days at max-parallel:1).
+# cancel-in-progress is intentionally FALSE: a full suite run takes days, so a
+# mid-run push must NOT cancel it back to job 1 (the suite would never complete
+# on an active PR). New pushes queue behind the in-flight run instead of
+# interrupting it. Trade-off: stacked pushes can pile up overlapping runs and
+# burn LLM quota - acceptable given the alternative (never finishing).
+concurrency:
+  group: clawprobench-${{ github.event.pull_request.number || github.ref || github.run_id }}
+  cancel-in-progress: false
+
+env:
+  # Fork pin. Default hard-coded; override ONLY via a base-branch repo Variable
+  # (never from PR-controllable input — run.py runs inside the container with
+  # LLM_API_KEY in scope, so the fork commit must be trusted-by-pin).
+  # Track the reviewed fork's main branch. This is intentionally mutable so CI
+  # receives fork fixes without a separate pin-bump PR; only a base-side repo
+  # Variable may override it, never PR-controlled input.
+  CLAWPROBENCH_PIN: ${{ vars.CLAWPROBENCH_PIN || 'main' }}
+  CLAWPROBENCH_REPO: ${{ vars.CLAWPROBENCH_REPO || 'https://github.com/ACautomata/ClawResearchBench.git' }}
+  BENCH_RESULTS_DIR: bench-results
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  setup:
+    name: "Verify secrets (fail-fast gate)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      # "true" when the run must skip neutrally (fork PR: pull_request sandboxes
+      # secrets, so LLM_API_KEY is intentionally absent). Downstream jobs gate on
+      # this so fork PRs get a neutral check instead of a permanent failure.
+      skip: ${{ steps.verify.outputs.skip }}
+    steps:
+      - name: "Verify required secrets"
+        id: verify
+        env:
+          # Never expose this secret to a PR checkout: a same-repository PR may
+          # modify the benchmark bootstrap just as an external fork can.
+          LLM_API_KEY: ${{ github.event_name != 'pull_request' && secrets.LLM_API_KEY || '' }}
+          # Route PR-controlled context through env (not ${{ }} interpolation
+          # into run:) so a fork-controlled repo name cannot re-parse as shell.
+          # Empty for non-pull_request events.
+          EVENT_NAME: ${{ github.event_name }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          if [ -z "${LLM_API_KEY:-}" ]; then
+            if [ "${EVENT_NAME}" = "pull_request" ]; then
+              echo "::notice::Pull request run - skipping ClawProBench because PR-controlled benchmark code never receives LLM_API_KEY. Use workflow_dispatch from a trusted branch or wait for main."
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::error::LLM_API_KEY secret is not configured. Add it under Settings → Secrets → Actions." >&2
+            exit 1
+          fi
+          echo "LLM_API_KEY present."
+          echo "fork pin: ${CLAWPROBENCH_PIN}"
+
+  discover:
+    name: "Discover research scenarios"
+    needs: setup
+    # Skip on fork PRs without secrets (setup sets skip=true). `always()` is not
+    # needed: setup exits 0 on both real-success and fork-skip paths.
+    if: needs.setup.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
+      scenarios: ${{ steps.gen.outputs.scenarios }}
+      count: ${{ steps.gen.outputs.count }}
+    env:
+      # CLAWPROBENCH_PIN / CLAWPROBENCH_REPO are inherited from the workflow-
+      # level `env:` (the `env` context is NOT available inside a job-level
+      # env: block, so they must not be re-referenced here). inputs.scenario is
+      # workflow_dispatch-only, so admin-trusted (see the security comment at
+      # the top of this file); routed through env, never interpolated into run:.
+      INPUT_SCENARIO: ${{ inputs.scenario }}
+    steps:
+      - name: "Clone fork @ pin + extract research scenario ids"
+        id: gen
+        run: |
+          set -euo pipefail
+          FORK_SRC="$(mktemp -d)/clawprobench"
+          # --filter=blob:none (partial clone, no history blobs) + fetch default
+          # ref so an arbitrary pinned commit resolves. GitHub rejects shallow
+          # fetch-by-SHA for non-HEAD commits, so --depth 1 is the wrong tool.
+          git clone --quiet --filter=blob:none --no-checkout "${CLAWPROBENCH_REPO}" "${FORK_SRC}"
+          git -C "${FORK_SRC}" fetch --quiet origin
+          git -C "${FORK_SRC}" checkout -q "${CLAWPROBENCH_PIN}"
+          echo "[discover] fork pinned at ${CLAWPROBENCH_PIN}"
+
+          # loader.py:200 sets scenario_id=raw["id"] verbatim (no transform),
+          # so the YAML top-level `id:` IS the value --scenario accepts. Same
+          # authority as `run.py --list`, but zero deps / no container / seconds.
+          mapfile -t IDS < <(grep -rhoE '^id:[[:space:]]+\S+' \
+              "${FORK_SRC}/scenarios/research/" | awk '{print $2}' | sort -u)
+
+          # workflow_dispatch override: narrow the matrix to a single scenario
+          # (replaces the old per-job skip dance in the bench job).
+          if [ -n "${INPUT_SCENARIO}" ]; then
+            IDS=("${INPUT_SCENARIO}")
+          fi
+
+          [ "${#IDS[@]}" -gt 0 ] || {
+            echo "::error::no research scenario ids discovered at pin ${CLAWPROBENCH_PIN}" >&2
+            exit 1
+          }
+
+          matrix=$(printf '%s\n' "${IDS[@]}" | jq -R . | jq -cs '{scenario: .}')
+          scenarios=$(printf '%s,' "${IDS[@]}"); scenarios=${scenarios%,}
+
+          {
+            echo "matrix=${matrix}"
+            echo "scenarios=${scenarios}"
+            echo "count=${#IDS[@]}"
+          } >> "$GITHUB_OUTPUT"
+          echo "::notice::discovered ${#IDS[@]} research scenario(s) at pin ${CLAWPROBENCH_PIN}"
+
+  bench:
+    name: "Bench: ${{ matrix.scenario }}"
+    needs: [setup, discover]
+    # Empty matrix (pin moved and research/ vanished) would otherwise spawn a
+    # no-op job; skip the whole bench fan-out instead. Also skip on fork-no-secret.
+    if: needs.setup.outputs.skip != 'true' && needs.discover.outputs.count != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        # 1 scenario per job, dynamically discovered from the fork's
+        # scenarios/research/*.yaml `id:` fields (see the discover job). fork
+        # --scenario is single-valued and matches the YAML `id` field, NOT the
+        # filename stem - research scenarios are `research_<stem>`, and
+        # idea_generate drops its descriptive suffix in the id, e.g.
+        # idea_generate_qa_001_paper_only.yaml -> research_idea_generate_qa_001.
+        # Each job boots its own container (runners are separate VMs - a
+        # container cannot be shared across jobs). Per-job BENCH_RUN_ID
+        # isolates compose project / container name / data dir as
+        # defense-in-depth on top of max-parallel:1.
+        scenario: ${{ fromJSON(needs.discover.outputs.matrix).scenario }}
+    env:
+      BENCH_RUN_ID: ${{ github.run_id }}-${{ matrix.scenario }}
+      BENCH_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+      BENCH_REPO: ${{ github.repository }}
+      BENCH_PR_NUMBER: ${{ github.event.pull_request.number }}
+      LLM_API_KEY: ${{ github.event_name != 'pull_request' && secrets.LLM_API_KEY || '' }}
+      LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+    steps:
+      - name: "Resolve trials (workflow_dispatch override)"
+        id: sel
+        env:
+          # workflow_dispatch inputs are admin-trusted, but route through env
+          # rather than interpolating into run: (defense-in-depth). The single-
+          # scenario dispatch narrowing already happened in the discover job.
+          INPUT_TRIALS: ${{ inputs.trials }}
+        run: |
+          trials="${INPUT_TRIALS:-3}"
+          echo "trials=${trials}" >> "$GITHUB_OUTPUT"
+      - name: "Checkout PR head"
+        # actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: "Set up Docker Buildx"
+        # docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - name: "Run ClawProBench (one scenario)"
+        # Route matrix.scenario + trials through the step env: (NOT `${{ }}`
+        # interpolation into run:). `${{ }}` is textual substitution before the
+        # shell parses the script, so a malicious id like `x";rm -rf /;#` would
+        # be re-parsed and executed. Env vars referenced as "$SCENARIO" inside
+        # double quotes are literal values the shell never re-evaluates.
+        # Defense-in-depth: the scenario ids come from a pinned commit of an
+        # admin-trusted fork (vars.CLAWPROBENCH_REPO + vars.CLAWPROBENCH_PIN),
+        # so they are not attacker-controlled today - but the data source is
+        # external YAML content, so do not trust it as shell.
+        env:
+          SCENARIO: ${{ matrix.scenario }}
+          TRIALS: ${{ steps.sel.outputs.trials }}
+        run: |
+          bash .github/bench/run_clawprobench.sh \
+            --scenario "${SCENARIO}" \
+            --trials "${TRIALS}"
+      - name: "Upload result"
+        if: always()
+        # actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          # Per-scenario artifact name (the file is already result_<scenario>.json),
+          # so the aggregate's merge-multiple cannot collide.
+          name: result-${{ matrix.scenario }}
+          path: results/result_${{ matrix.scenario }}.json
+          if-no-files-found: error
+
+  aggregate:
+    name: "Aggregate + PR comment"
+    needs: [setup, discover, bench]
+    # `always()` keeps the renderer running when individual bench jobs fail (to
+    # post a partial-results comment), but skip entirely on fork-no-secret so
+    # no misleading "0 results" comment lands on a fork PR.
+    if: always() && needs.setup.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      BENCH_REPO: ${{ github.repository }}
+      BENCH_PR_NUMBER: ${{ github.event.pull_request.number }}
+      BENCH_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+      BENCH_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+      BENCH_RESULTS_DIR: bench-results
+      BENCH_BASE_SUMMARY: ${{ secrets.BENCH_BASE_RESULTS_JSON }}
+      BENCH_EXPECTED_SCENARIOS: ${{ needs.discover.outputs.scenarios }}
+    steps:
+      - name: "Checkout"
+        # actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: "Set up Python"
+        # actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.11"
+      - name: "Download all results"
+        # actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        # continue-on-error: if every bench job fails (no result-* artifacts),
+        # download-artifact@v4 with pattern:result-* matches nothing and fails
+        # the step. We still want the renderer to run and post a "0 results"
+        # comment so the PR isn't left silent. The renderer handles empty input.
+        continue-on-error: true
+        with:
+          pattern: result-*
+          path: bench-results
+          merge-multiple: true
+      - name: "Render + post PR comment"
+        run: |
+          ls -la bench-results/ || true
+          python3 .github/bench/report_clawprobench.py
+      - name: "Upload merged results"
+        if: always()
+        # actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: clawprobench-results-${{ github.run_id }}
+          path: bench-results/
+          if-no-files-found: warn

@@ -80,13 +80,6 @@ workspace/memory/.dreams/
 workspace/memory/dreaming/
 
 # === Benchmark runtime artifacts ===
-benchmarks/**/results/
-benchmarks/**/output/
-benchmarks/**/bench-report.json
-benchmarks/**/.wiki-import-failed
-benchmarks/**/.wiki-import-stderr.log
-benchmarks/**/.bake-debug/
-benchmarks/**/qa.qa*.jsonl
 bench-results/
 bench-debug/
 .bench-runtime/
@@ -105,3 +98,7 @@ workspace/zhihu_cookies.json
 .claude/skills/nuwa-skill/6-agents-parallel.png
 .claude/skills/nuwa-skill/advisory-board.png
 .claude/skills/nuwa-skill/assets/hero.gif
+
+# ClawProBench fork CI (local run outputs)
+results/
+clawprobench/

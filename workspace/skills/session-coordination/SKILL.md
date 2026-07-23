@@ -1,6 +1,6 @@
 ---
 name: session-coordination
-description: Coordinate an existing session or a spawned subagent with sessions_send. Use when a caller must pass a callback session key and full skill prompt to a callee, a callee must promptly report a blocker or material finding, or a task needs inter-session updates before final delivery.
+description: Coordinate inter-session communication — when and why to send messages, how to structure spawned tasks. Message format lives in `send`. Use when a caller must pass a callback session key and full skill prompt to a callee, a callee must promptly report a blocker or material finding, or a task needs inter-session updates before final delivery.
 ---
 
 # session-coordination - 会话协调
@@ -12,7 +12,7 @@ description: Coordinate an existing session or a spawned subagent with sessions_
 | 目标 | 工具 | 规则 |
 | --- | --- | --- |
 | 创建独立工作 | `sessions_spawn` | caller 创建；self-spawn 省略 `agentId`。 |
-| 回传发现或协调既有会话 | `sessions_send` | 只向 task 中明确给出的目标发送。 |
+| 回传发现或协调既有会话 | `sessions_send` | 格式细节见 `send`；只向 task 中明确给出的目标发送。 |
 | 持久化领域产出 | `wiki_apply` + inline reply | 不用 session key 或文件路径充当产物交接。 |
 
 `timeoutSeconds: 0` 表示非阻塞投递，适合 callee 的即时回传。caller 需要在当前步骤取得回复时，才设置正的 `timeoutSeconds`。
@@ -35,7 +35,7 @@ description: Coordinate an existing session or a spawned subagent with sessions_
 </work_item>
 
 <reporting_protocol>
-出现 blocker、需要 caller 决策、已验证的关键发现或会改变后续工作的结论时，立刻用 sessions_send 向 caller_session_key 发送一条简短结构化回传。没有可行动的新信息时继续工作，不发送进度噪声。最终仍按 work_item 返回完整交付或具体失败原因。
+出现 blocker、需要 caller 决策、已验证的关键发现或会改变后续工作的结论时，立刻用 sessions_send 向 caller_session_key 发送一条简短结构化回传（格式见 `send`）。没有可行动的新信息时继续工作，不发送进度噪声。最终仍按 work_item 返回完整交付或具体失败原因。
 </reporting_protocol>
 ```
 
@@ -46,37 +46,25 @@ description: Coordinate an existing session or a spawned subagent with sessions_
 
 ## Callee：及时回传可行动发现
 
-1. 从 task 中读取 `<caller_session_key>` 与 `<invoked_skill_prompt>`，按该 prompt 和 work item 工作。
+1. 从 task 中读取 `<caller_session_key>` 与 `<invoked_skill_prompt>`，按该 prompt 和 work item 工作。获取自己当前**可路由的非 thread-scoped** session key（格式为 `agent:main:<id>`，不以 `:thread:<id>` 结尾），作为 `<message from="...">` 属性的发送方标识。
 2. 出现下列任一事件时，立即发送**一条短消息**，而不是等到最终回复：
    - 输入缺失、不可读或任务无法继续；
    - caller 必须选择的方案、范围或风险；
    - 已验证且会改变后续工作方向的发现；
    - 关键阶段完成，且 caller 可以据此安排后续工作。
-3. 使用：
-
-   ```text
-   sessions_send(
-     sessionKey="<caller_session_key>",
-     message="""
-     STATUS: blocker | decision_needed | finding | milestone
-     SUMMARY: <一句话>
-     EVIDENCE: <必要证据或具体原因>
-     NEXT: <callee 将继续做什么，或 caller 需要做什么>
-     """,
-     timeoutSeconds=0
-   )
-   ```
+3. 使用 `send` predicate 定义的消息格式调用 `sessions_send`。
 
 4. 最终 reply 仍返回完整交付或明确失败原因；需要持久化的 predicate 产出仍写入 wiki 并内联返回内容本体。
 
 ## 回传门禁
 
-- 只发送可行动的新信息；不发送“仍在处理”“继续工作中”等低价值进度。
+- 只发送可行动的新信息；不发送”仍在处理””继续工作中”等低价值进度。
 - 不发送 secrets、无关私人上下文或未经验证的推测。
 - 不使用 `watch`，不枚举会话、不读取会话历史，也不把 session key 复制到最终交付中。
 - 不向以 `:thread:<id>` 结尾的 thread-scoped session key 发送。
 - 收到回传的 caller 自己决定后续工作；callee 不因回传而创建递归会话或无限来回通信。
 - 若缺少 caller key、`sessions_send` 被拒绝或投递失败，继续完成可完成的工作，并在最终 reply 明确说明哪条回传未送达；不得声称已通知 caller。
+- 消息格式必须遵循 `send` predicate 的要求；`sessionKey` 填 caller key（目标），`<message from="...">` 填 callee own key（发送方）。
 - 当前 sandbox 关闭。若未来使用 `sandbox: "require"`，会话可见性被限制到 tree；只有 caller 位于该可见树中时才可依赖此协议。
 
 ## 完成门禁

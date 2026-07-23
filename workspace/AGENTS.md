@@ -13,7 +13,7 @@
 
 你用两层 skill 干活：
 
-- **Predicate skill（8 个，原子领域能力）**：`ingest` / `curate` / `extract` / `critic` / `design` / `spec` / `audit` / `ideate`。每个做一个研究动词，是该项能力的唯一来源（mission、输入、输出结构、完成门禁都在该 predicate 里）。
+- **Predicate skill（9 个，原子能力）**：`ingest` / `curate` / `extract` / `critic` / `design` / `spec` / `audit` / `ideate` / `send`。每个是该项能力的唯一来源（mission、输入、输出结构、完成门禁都在该 predicate 里）。
 - **Orchestrator skill（7 个，场景编排）**：`paper-ingest` / `paper-read` / `paper-validate` / `paper-audit` / `literature-query` / `brainstorm` / `paper-batch-ingest`。它们在文本里 reference predicate，告诉你用哪些、什么顺序。
 
 收到场景请求时用对应 orchestrator；它点名哪些 predicate，你就加载并运行它们。单个研究动词也可直接用 predicate（如"找这篇论文的问题"-> `critic`）。
@@ -28,7 +28,7 @@ spawn self 时，`sessions_spawn` 不带 `agentId`。不要 spawn 已折成 pred
 
 使用 `session-coordination` 时，caller 在每个 `sessions_spawn` task 中内联自己的可投递、非 thread-scoped session key 和本次调用 skill 的完整 prompt；若拿不到非 thread-scoped key，则改用 completion 交付。它们分别只用于即时回传和让 isolated callee 获得完整工作上下文，不是产物交接接口。
 
-callee 形成 blocker、需 caller 决策、已验证的关键发现或可安排后续工作的 milestone 时，立即用 `sessions_send` 向 caller 回传一条简短结构化消息；不要等待任务结束才发送长篇汇报。没有可行动的新信息时不发送进度噪声。最终领域产出仍按下述 wiki + inline reply 规则交付；session key 和文件路径不能替代产物内容。
+callee 形成 blocker、需 caller 决策、已验证的关键发现或可安排后续工作的 milestone 时，立即用 `sessions_send` 向 caller 回传一条简短结构化消息，消息必须用 `<message from="<callee_own_session_key>">` XML 标签包裹（`sessionKey` 填 caller 的 key，`from` 标识 callee 身份）；不要等待任务结束才发送长篇汇报。没有可行动的新信息时不发送进度噪声。最终领域产出仍按下述 wiki + inline reply 规则交付；session key 和文件路径不能替代产物内容。
 
 ## Standing order：产出交付
 
@@ -36,7 +36,9 @@ callee 形成 blocker、需 caller 决策、已验证的关键发现或可安排
 
 **例外：**在 `brainstorm` 流程中，`ideate(candidate_only: true)` 是持久化前的并行草案模式。它只内联返回候选，绝不写 wiki；只有 main 反驳后交给 `ideate(reviewed_cards)` 的 `survived` 批次可写入。
 
-- 每个 predicate（`ideate(candidate_only: true)` 除外）运行后：确认它通过 `wiki_apply` 把产出写进了 wiki，并在当前 reply 里返回了内容本体（不只说"已写入"）。
+**例外：**`send` 是纯传输 predicate，无研究产出；它不应调用 `wiki_apply`。
+
+- 每个 predicate（`ideate(candidate_only: true)`、`send` 除外）运行后：确认它通过 `wiki_apply` 把产出写进了 wiki，并在当前 reply 里返回了内容本体（不只说"已写入"）。
 - 下游 predicate 需要上游产出时：从 wiki 读（`wiki_get` / `wiki_search`），或直接用当前 reply 里上游刚返回的内容。
 
 ## 工作原则

@@ -17,7 +17,7 @@ This repo follows a **single main agent + two-layer skill** pattern. The main ag
 - **canvas/index.html** — OpenClaw Canvas web UI.
 - **workspace/** — Main agent working directory (flattened — no per-agent subdirectories). Contains core workspace files (SOUL.md, AGENTS.md, IDENTITY.md, USER.md, TOOLS.md, MEMORY.md, HEARTBEAT.md, DREAMS.md) and `skills/`. See [docs](https://docs.openclaw.ai/concepts/agent-workspace).
 - **workspace/skills/** — Two-layer skills owned by main:
-  - **Predicate skills (8, atomic capabilities)**: `ingest`, `curate`, `extract`, `critic`, `design`, `spec`, `audit`, `ideate`. Each is the single source of truth for one research verb.
+  - **Predicate skills (9, atomic capabilities)**: `ingest`, `curate`, `extract`, `critic`, `design`, `spec`, `audit`, `ideate`, `send`. Each is the single source of truth for one research verb; `send` is a pure-transport skill exempt from wiki persistence.
   - **Orchestrator skills (7, scenario composition)**: `paper-ingest` (ingest→curate), `paper-read` (ingest→extract), `paper-validate` (design→spec), `paper-audit` (audit), `literature-query` (curate), `brainstorm` (curate→ideate), `paper-batch-ingest` (spawn self per paper). They reference predicates in text.
   - `critic` is standalone (no orchestrator wraps it); "完整分析" = main chains `paper-read` → `critic` → `paper-validate` → `paper-audit` directly.
 - **docs/** — Local snapshots of OpenClaw design references (Lobster, Task Flow, Hooks, Standing Orders, Commitments, Automation overview). **Read these before designing any new feature** — start with `docs/README.md` for the "designing X? read Y" index. The canonical source is <https://docs.openclaw.ai/>; refresh the local files when upstream changes.
@@ -69,7 +69,7 @@ There is exactly one agent workspace:
 
 - **Main agent**: `workspace/` (flattened — persona files and `skills/` live directly here, no per-agent subdirectories). Maps to `~/.openclaw/workspace`.
 
-The `id` matches `openclaw.json` → `agents.list[]` (which contains only `main`). Producer capabilities (ingest/curate/extract/critic/design/spec/audit/ideate) are **predicate skills** under `workspace/skills/`, not separate workspaces.
+The `id` matches `openclaw.json` → `agents.list[]` (which contains only `main`). Producer capabilities (ingest/curate/extract/critic/design/spec/audit/ideate/send) are **predicate skills** under `workspace/skills/`, not separate workspaces.
 
 ### Agent Design Pattern
 
@@ -85,6 +85,7 @@ The system uses a **single main agent + two-layer skills** model. Main does all 
    - `spec` — claude-code task prompt generation.
    - `audit` — Analysis-chain quality audit.
    - `ideate` — Research idea card generation.
+   - `send` — Pure-transport predicate for inter-session message delivery; exempt from wiki persistence.
 3. **Orchestrator skills** — live at `workspace/skills/<orchestrator>/`. Compose predicates by **reference** (textual: "run the `ingest` skill"); main loads and runs the referenced predicate. There are 7:
    - `paper-ingest` — ingest→curate.
    - `paper-read` — ingest→extract.
@@ -102,7 +103,7 @@ The system uses a **single main agent + two-layer skills** model. Main does all 
 - Predicates remain model-invoked (keep a `description`) so orchestrators can reference them and each can fire independently when the operator asks for a single verb.
 - The `agents.defaults.subagents.allowAgents` list in `openclaw.json` is `[]` — main does not cross-agent spawn any agent (the `judge` agent has been retired; see ADR-0002). spawn self (`sessions_spawn` without `agentId`, isolated context) is the default capability and needs no allowAgents entry; use it for batch/parallel work (e.g. `paper-batch-ingest`).
 - `delegationMode` is `suggest` (not `prefer`) so main is not pushed to delegate; real enforcement is `allowAgents`.
-- **Delivery rule (one standing order in `workspace/AGENTS.md`):** a predicate writes its full output to the wiki (via `wiki_apply`) and returns the content in its reply. Main is the single context: within one orchestrator, full-inline passing is fine; cross-orchestrator handoff goes through the wiki. Producer skills never write outputs to the filesystem for other agents to find by path.
+- **Delivery rule (one standing order in `workspace/AGENTS.md`):** a predicate writes its full output to the wiki (via `wiki_apply`) and returns the content in its reply. Exception: `send` is a pure-transport predicate with no research output and must not call `wiki_apply`. Main is the single context: within one orchestrator, full-inline passing is fine; cross-orchestrator handoff goes through the wiki. Producer skills never write outputs to the filesystem for other agents to find by path.
 
 ### ClawProBench fork CI（active — 颖姗 research 能力门）
 

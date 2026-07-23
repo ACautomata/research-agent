@@ -21,7 +21,7 @@ _Avoid_: delegate、dispatch（那是 main 在单 context 内走 skill，不是 
 ### Skill 分层
 
 **Predicate skill（谓词 skill）**:
-一个原子、可复用的领域能力，只做一个动词的研究动作。当前 8 个：ingest / curate / extract / critic / design / spec / audit / ideate。其中 **critic 独立存在、不被任何 orchestrator 引用**（用户或 main 直接调用）；design + spec 被 paper-validate 引用。
+一个原子、可复用的领域能力，只做一个动词的研究动作。当前 9 个：ingest / curate / extract / critic / design / spec / audit / ideate / send。其中 **critic 独立存在、不被任何 orchestrator 引用**（用户或 main 直接调用）；design + spec 被 paper-validate 引用；**send 是纯传输 predicate，无研究产出，不受 `wiki_apply` 规则约束**。
 _Avoid_: subagent、worker、module。
 
 **Orchestrator skill（编排 skill）**:

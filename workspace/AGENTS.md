@@ -36,7 +36,9 @@ callee 形成 blocker、需 caller 决策、已验证的关键发现或可安排
 
 **例外：**在 `brainstorm` 流程中，`ideate(candidate_only: true)` 是持久化前的并行草案模式。它只内联返回候选，绝不写 wiki；只有 main 反驳后交给 `ideate(reviewed_cards)` 的 `survived` 批次可写入。
 
-- 每个 predicate（`ideate(candidate_only: true)` 除外）运行后：确认它通过 `wiki_apply` 把产出写进了 wiki，并在当前 reply 里返回了内容本体（不只说"已写入"）。
+**例外：**`send` 是纯传输 predicate，无研究产出；它不应调用 `wiki_apply`。
+
+- 每个 predicate（`ideate(candidate_only: true)`、`send` 除外）运行后：确认它通过 `wiki_apply` 把产出写进了 wiki，并在当前 reply 里返回了内容本体（不只说"已写入"）。
 - 下游 predicate 需要上游产出时：从 wiki 读（`wiki_get` / `wiki_search`），或直接用当前 reply 里上游刚返回的内容。
 
 ## 工作原则

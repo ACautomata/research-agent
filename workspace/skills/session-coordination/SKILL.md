@@ -64,7 +64,7 @@ description: Coordinate inter-session communication — when and why to send mes
 - 不向以 `:thread:<id>` 结尾的 thread-scoped session key 发送。
 - 收到回传的 caller 自己决定后续工作；callee 不因回传而创建递归会话或无限来回通信。
 - 若缺少 caller key、`sessions_send` 被拒绝或投递失败，继续完成可完成的工作，并在最终 reply 明确说明哪条回传未送达；不得声称已通知 caller。
-- 消息格式必须遵循 `send` predicate 的要求；`sessionKey` 填 callee own key，`<message from=”...”>` 填 caller key。
+- 消息格式必须遵循 `send` predicate 的要求；`sessionKey` 填 caller key（目标），`<message from="...">` 填 callee own key（发送方）。
 - 当前 sandbox 关闭。若未来使用 `sandbox: "require"`，会话可见性被限制到 tree；只有 caller 位于该可见树中时才可依赖此协议。
 
 ## 完成门禁

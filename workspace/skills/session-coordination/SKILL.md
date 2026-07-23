@@ -35,7 +35,7 @@ description: Coordinate an existing session or a spawned subagent with sessions_
 </work_item>
 
 <reporting_protocol>
-出现 blocker、需要 caller 决策、已验证的关键发现或会改变后续工作的结论时，立刻用 sessions_send 向 caller_session_key 发送一条简短结构化回传。消息必须用 `<message from="<caller_session_key>">` XML 标签包裹。没有可行动的新信息时继续工作，不发送进度噪声。最终仍按 work_item 返回完整交付或具体失败原因。
+出现 blocker、需要 caller 决策、已验证的关键发现或会改变后续工作的结论时，立刻用 sessions_send 向 caller_session_key 发送一条简短结构化回传。消息**必须**用 `<message from="<callee_own_session_key>">` XML 标签包裹。没有可行动的新信息时继续工作，不发送进度噪声。最终仍按 work_item 返回完整交付或具体失败原因。
 </reporting_protocol>
 ```
 
@@ -46,19 +46,19 @@ description: Coordinate an existing session or a spawned subagent with sessions_
 
 ## Callee：及时回传可行动发现
 
-1. 从 task 中读取 `<caller_session_key>` 与 `<invoked_skill_prompt>`，按该 prompt 和 work item 工作。获取自己当前**可路由的非 thread-scoped** session key（格式为 `agent:main:<id>`，不以 `:thread:<id>` 结尾），作为 callee 身份标识。
+1. 从 task 中读取 `<caller_session_key>` 与 `<invoked_skill_prompt>`，按该 prompt 和 work item 工作。获取自己当前**可路由的非 thread-scoped** session key（格式为 `agent:main:<id>`，不以 `:thread:<id>` 结尾），作为 `<callee_own_session_key>` 内联到消息体中以标识发送方。
 2. 出现下列任一事件时，立即发送**一条短消息**，而不是等到最终回复：
    - 输入缺失、不可读或任务无法继续；
    - caller 必须选择的方案、范围或风险；
    - 已验证且会改变后续工作方向的发现；
    - 关键阶段完成，且 caller 可以据此安排后续工作。
-3. 消息**必须**用 `<message from="<caller_session_key>">` XML 标签包裹，格式：
+3. 消息**必须**用 `<message from="<callee_own_session_key>">` XML 标签包裹，格式：
 
    ```xml
    sessions_send(
-     sessionKey="<callee_own_session_key>",
+     sessionKey="<caller_session_key>",
      message="""
-     <message from="<caller_session_key>">
+     <message from="<callee_own_session_key>">
      STATUS: blocker | decision_needed | finding | milestone
      SUMMARY: <一句话>
      EVIDENCE: <必要证据或具体原因>
@@ -69,7 +69,7 @@ description: Coordinate an existing session or a spawned subagent with sessions_
    )
    ```
 
-4. `sessionKey` 填 callee 自己的 session key（标识发送方），`from` 属性填 caller 的 session key（即 task 中提供的 `<caller_session_key>`）。不得省略 `<message>` 标签或 `from` 属性。
+4. `sessionKey` 填 caller 的 session key（即 task 中提供的 `<caller_session_key>`，标识消息发往何处），`from` 属性填 callee 自己的 session key（标识消息的发送方）。不得省略 `<message>` 标签或 `from` 属性。
 5. 最终 reply 仍返回完整交付或明确失败原因；需要持久化的 predicate 产出仍写入 wiki 并内联返回内容本体。
 
 ## 回传门禁
@@ -80,7 +80,7 @@ description: Coordinate an existing session or a spawned subagent with sessions_
 - 不向以 `:thread:<id>` 结尾的 thread-scoped session key 发送。
 - 收到回传的 caller 自己决定后续工作；callee 不因回传而创建递归会话或无限来回通信。
 - 若缺少 caller key、`sessions_send` 被拒绝或投递失败，继续完成可完成的工作，并在最终 reply 明确说明哪条回传未送达；不得声称已通知 caller。
-- 每条消息必须有 `<message from="<caller_session_key>">` 包裹，`from` 填 task 中提供的 caller session key，`sessionKey` 填 callee 自己的 session key。
+- 每条消息必须有 `<message from="<callee_own_session_key>">` 包裹，`from` 填 callee 自己的 session key，`sessionKey` 填 caller 的 session key。
 - 当前 sandbox 关闭。若未来使用 `sandbox: "require"`，会话可见性被限制到 tree；只有 caller 位于该可见树中时才可依赖此协议。
 
 ## 完成门禁

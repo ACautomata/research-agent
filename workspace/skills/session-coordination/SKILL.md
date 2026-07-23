@@ -46,7 +46,7 @@ description: Coordinate inter-session communication — when and why to send mes
 
 ## Callee：及时回传可行动发现
 
-1. 从 task 中读取 `<caller_session_key>` 与 `<invoked_skill_prompt>`，按该 prompt 和 work item 工作。获取自己当前**可路由的非 thread-scoped** session key（格式为 `agent:main:<id>`，不以 `:thread:<id>` 结尾），作为 `sessionKey` 参数的发送方标识。
+1. 从 task 中读取 `<caller_session_key>` 与 `<invoked_skill_prompt>`，按该 prompt 和 work item 工作。获取自己当前**可路由的非 thread-scoped** session key（格式为 `agent:main:<id>`，不以 `:thread:<id>` 结尾），作为 `<message from="...">` 属性的发送方标识。
 2. 出现下列任一事件时，立即发送**一条短消息**，而不是等到最终回复：
    - 输入缺失、不可读或任务无法继续；
    - caller 必须选择的方案、范围或风险；

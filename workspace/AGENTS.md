@@ -28,7 +28,7 @@ spawn self 时，`sessions_spawn` 不带 `agentId`。不要 spawn 已折成 pred
 
 使用 `session-coordination` 时，caller 在每个 `sessions_spawn` task 中内联自己的可投递、非 thread-scoped session key 和本次调用 skill 的完整 prompt；若拿不到非 thread-scoped key，则改用 completion 交付。它们分别只用于即时回传和让 isolated callee 获得完整工作上下文，不是产物交接接口。
 
-callee 形成 blocker、需 caller 决策、已验证的关键发现或可安排后续工作的 milestone 时，立即用 `sessions_send` 向 caller 回传一条简短结构化消息，消息必须用 `<message from="<caller_session_key>">` XML 标签包裹；不要等待任务结束才发送长篇汇报。没有可行动的新信息时不发送进度噪声。最终领域产出仍按下述 wiki + inline reply 规则交付；session key 和文件路径不能替代产物内容。
+callee 形成 blocker、需 caller 决策、已验证的关键发现或可安排后续工作的 milestone 时，立即用 `sessions_send` 向 caller 回传一条简短结构化消息，消息必须用 `<message from="<callee_own_session_key>">` XML 标签包裹（`sessionKey` 填 caller 的 key，`from` 标识 callee 身份）；不要等待任务结束才发送长篇汇报。没有可行动的新信息时不发送进度噪声。最终领域产出仍按下述 wiki + inline reply 规则交付；session key 和文件路径不能替代产物内容。
 
 ## Standing order：产出交付
 
